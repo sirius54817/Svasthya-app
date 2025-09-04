@@ -37,6 +37,16 @@ dependencies:
   
   # Supabase for backend database and auth
   supabase_flutter: ^2.8.2
+  
+  # HTTP requests for API calls
+  http: ^1.1.0
+  
+  # Video and GIF players for exercise demonstrations
+  video_player: ^2.8.1
+  chewie: ^1.7.4
+  
+  # Cached network images with GIF support
+  cached_network_image: ^3.3.0
 
 dev_dependencies:
   flutter_test:

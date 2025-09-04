@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/user.dart' as UserModel;
 import '../models/prescription.dart';
 import '../models/prescription_medication.dart';
+import '../models/prescription_exercise.dart';
 
 class DatabaseService {
   // Get Supabase client instance
@@ -493,6 +494,217 @@ class DatabaseService {
     } catch (e) {
       print('❌ Error fetching active patient medications: $e');
       return null;
+    }
+  }
+
+  // PRESCRIPTION EXERCISES TABLE METHODS
+  
+  // Get all exercises for current patient (across all prescriptions)
+  static Future<List<PrescriptionExercise>?> getPatientExercises() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_exercises')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .order('created_at', ascending: false);
+      
+      final exercises = response.map((json) => PrescriptionExercise.fromJson(json)).toList();
+      print('✅ Patient exercises fetched successfully: ${exercises.length} exercises found');
+      return exercises;
+    } catch (e) {
+      print('❌ Error fetching patient exercises: $e');
+      return null;
+    }
+  }
+
+  // Get exercises for a specific prescription
+  static Future<List<PrescriptionExercise>?> getExercisesByPrescriptionId(String prescriptionId) async {
+    try {
+      final response = await _client
+          .from('prescription_exercises')
+          .select('*')
+          .eq('prescription_id', prescriptionId)
+          .order('created_at', ascending: false);
+      
+      final exercises = response.map((json) => PrescriptionExercise.fromJson(json)).toList();
+      print('✅ Prescription exercises fetched successfully: ${exercises.length} exercises found');
+      return exercises;
+    } catch (e) {
+      print('❌ Error fetching prescription exercises: $e');
+      return null;
+    }
+  }
+
+  // Get exercises by frequency (for current patient)
+  static Future<List<PrescriptionExercise>?> getPatientExercisesByFrequency(String frequency) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_exercises')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .eq('frequency', frequency)
+          .order('created_at', ascending: false);
+      
+      final exercises = response.map((json) => PrescriptionExercise.fromJson(json)).toList();
+      print('✅ Patient exercises by frequency fetched successfully: ${exercises.length} exercises found');
+      return exercises;
+    } catch (e) {
+      print('❌ Error fetching patient exercises by frequency: $e');
+      return null;
+    }
+  }
+
+  // Search exercises for current patient
+  static Future<List<PrescriptionExercise>?> searchPatientExercises(String searchTerm) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_exercises')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .or('special_instructions.ilike.%$searchTerm%')
+          .order('created_at', ascending: false);
+      
+      final exercises = response.map((json) => PrescriptionExercise.fromJson(json)).toList();
+      print('✅ Patient exercises search completed: ${exercises.length} exercises found');
+      return exercises;
+    } catch (e) {
+      print('❌ Error searching patient exercises: $e');
+      return null;
+    }
+  }
+
+  // Get a specific exercise by ID
+  static Future<PrescriptionExercise?> getExerciseById(String exerciseId) async {
+    try {
+      final response = await _client
+          .from('prescription_exercises')
+          .select('*')
+          .eq('id', exerciseId)
+          .single();
+      
+      final exercise = PrescriptionExercise.fromJson(response);
+      print('✅ Exercise by ID fetched successfully');
+      return exercise;
+    } catch (e) {
+      print('❌ Error fetching exercise by ID: $e');
+      return null;
+    }
+  }
+
+  // Get all active (current) exercises for patient (exercises from active prescriptions only)
+  static Future<List<PrescriptionExercise>?> getActivePatientExercises() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_exercises')
+          .select('''
+            *,
+            prescriptions!inner(patient_id, status)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .eq('prescriptions.status', 'active')
+          .order('created_at', ascending: false);
+      
+      final exercises = response.map((json) => PrescriptionExercise.fromJson(json)).toList();
+      print('✅ Active patient exercises fetched successfully: ${exercises.length} exercises found');
+      return exercises;
+    } catch (e) {
+      print('❌ Error fetching active patient exercises: $e');
+      return null;
+    }
+  }
+
+  // Add a new exercise to prescription
+  static Future<PrescriptionExercise?> addPrescriptionExercise(PrescriptionExercise prescriptionExercise) async {
+    try {
+      final exerciseData = prescriptionExercise.toJson();
+      // Remove the id field if it's empty since Supabase will generate it
+      if (exerciseData['id'] == null || exerciseData['id'].toString().isEmpty) {
+        exerciseData.remove('id');
+      }
+
+      final response = await _client
+          .from('prescription_exercises')
+          .insert(exerciseData)
+          .select()
+          .single();
+      
+      final addedExercise = PrescriptionExercise.fromJson(response);
+      print('✅ Prescription exercise added successfully: ${addedExercise.exerciseId}');
+      return addedExercise;
+    } catch (e) {
+      print('❌ Error adding prescription exercise: $e');
+      return null;
+    }
+  }
+
+  // Update an existing prescription exercise
+  static Future<PrescriptionExercise?> updatePrescriptionExercise(PrescriptionExercise prescriptionExercise) async {
+    try {
+      final exerciseData = prescriptionExercise.toJson();
+      exerciseData['updated_at'] = DateTime.now().toIso8601String();
+
+      final response = await _client
+          .from('prescription_exercises')
+          .update(exerciseData)
+          .eq('id', prescriptionExercise.id)
+          .select()
+          .single();
+      
+      final updatedExercise = PrescriptionExercise.fromJson(response);
+      print('✅ Prescription exercise updated successfully: ${updatedExercise.id}');
+      return updatedExercise;
+    } catch (e) {
+      print('❌ Error updating prescription exercise: $e');
+      return null;
+    }
+  }
+
+  // Delete a prescription exercise
+  static Future<bool> deletePrescriptionExercise(String exerciseId) async {
+    try {
+      await _client
+          .from('prescription_exercises')
+          .delete()
+          .eq('id', exerciseId);
+      
+      print('✅ Prescription exercise deleted successfully: $exerciseId');
+      return true;
+    } catch (e) {
+      print('❌ Error deleting prescription exercise: $e');
+      return false;
     }
   }
 }

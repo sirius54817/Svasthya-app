@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import 'prescriptions_page.dart';
 import 'prescription_medications_page.dart';
+import 'prescription_exercises_page.dart';
 
 class PatientHomePage extends StatefulWidget {
   const PatientHomePage({super.key});
@@ -58,8 +59,13 @@ class _PatientHomePageState extends State<PatientHomePage> {
                   _buildNavigationCard(
                     icon: Icons.fitness_center,
                     title: 'Prescription Exercises',
-                    subtitle: 'View your exercise routines',
-                    onTap: () => _showComingSoonDialog('Prescription Exercises'),
+                    subtitle: 'View exercise library',
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PrescriptionExercisesPage()),
+                      );
+                    },
                   ),
                   _buildNavigationCard(
                     icon: Icons.medication,
