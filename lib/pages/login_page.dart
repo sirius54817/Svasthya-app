@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/database_service.dart';
 import '../models/user.dart' as app_models;
 import '../theme/app_theme.dart';
+import 'patient_home_page.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -77,8 +78,10 @@ class _LoginPageState extends State<LoginPage> {
     // TODO: Replace with actual navigation routes based on user role
     switch (user.role) {
       case 'patient':
-        // Navigator.pushReplacementNamed(context, '/patient-dashboard');
-        _showSuccessDialog('Welcome Patient!', 'Patient dashboard coming soon...');
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (context) => const PatientHomePage()),
+        );
         break;
       case 'doctor':
         // Navigator.pushReplacementNamed(context, '/doctor-dashboard');
