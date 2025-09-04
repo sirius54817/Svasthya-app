@@ -3,6 +3,7 @@ import '../services/database_service.dart';
 import 'prescriptions_page.dart';
 import 'prescription_medications_page.dart';
 import 'prescription_exercises_page.dart';
+import 'user_profile_page.dart';
 
 class PatientHomePage extends StatefulWidget {
   const PatientHomePage({super.key});
@@ -93,7 +94,12 @@ class _PatientHomePageState extends State<PatientHomePage> {
                     icon: Icons.person,
                     title: 'User Profile',
                     subtitle: 'Manage your profile',
-                    onTap: () => _showComingSoonDialog('User Profile'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const UserProfilePage()),
+                      );
+                    },
                   ),
                 ],
               ),
@@ -158,24 +164,6 @@ class _PatientHomePageState extends State<PatientHomePage> {
           ),
         ),
       ),
-    );
-  }
-
-  void _showComingSoonDialog(String feature) {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          title: Text(feature),
-          content: const Text('This feature is coming soon!'),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('OK'),
-            ),
-          ],
-        );
-      },
     );
   }
 

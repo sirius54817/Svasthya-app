@@ -3,6 +3,7 @@ import '../models/user.dart' as UserModel;
 import '../models/prescription.dart';
 import '../models/prescription_medication.dart';
 import '../models/prescription_exercise.dart';
+import '../models/user_profile.dart';
 
 class DatabaseService {
   // Get Supabase client instance
@@ -705,6 +706,284 @@ class DatabaseService {
     } catch (e) {
       print('❌ Error deleting prescription exercise: $e');
       return false;
+    }
+  }
+
+  // USER PROFILES TABLE METHODS
+  
+  // Get current user's profile
+  static Future<UserProfile?> getCurrentUserProfile() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', currentUser.id)
+          .maybeSingle();
+      
+      if (response == null) {
+        print('ℹ️ No profile found for current user');
+        return null;
+      }
+
+      final profile = UserProfile.fromJson(response);
+      print('✅ Current user profile fetched successfully: ${profile.fullName}');
+      return profile;
+    } catch (e) {
+      print('❌ Error fetching current user profile: $e');
+      return null;
+    }
+  }
+
+  // Get user profile by user ID
+  static Future<UserProfile?> getUserProfileByUserId(String userId) async {
+    try {
+      final response = await _client
+          .from('user_profiles')
+          .select('*')
+          .eq('user_id', userId)
+          .maybeSingle();
+      
+      if (response == null) {
+        print('ℹ️ No profile found for user: $userId');
+        return null;
+      }
+
+      final profile = UserProfile.fromJson(response);
+      print('✅ User profile fetched successfully: ${profile.fullName}');
+      return profile;
+    } catch (e) {
+      print('❌ Error fetching user profile: $e');
+      return null;
+    }
+  }
+
+  // Get user profile by profile ID
+  static Future<UserProfile?> getUserProfileById(String profileId) async {
+    try {
+      final response = await _client
+          .from('user_profiles')
+          .select('*')
+          .eq('id', profileId)
+          .single();
+      
+      final profile = UserProfile.fromJson(response);
+      print('✅ User profile fetched by ID successfully: ${profile.fullName}');
+      return profile;
+    } catch (e) {
+      print('❌ Error fetching user profile by ID: $e');
+      return null;
+    }
+  }
+
+  // Create a new user profile
+  static Future<UserProfile?> createUserProfile(UserProfile userProfile) async {
+    try {
+      final profileData = userProfile.toJson();
+      // Remove the id field if it's empty since Supabase will generate it
+      if (profileData['id'] == null || profileData['id'].toString().isEmpty) {
+        profileData.remove('id');
+      }
+
+      final response = await _client
+          .from('user_profiles')
+          .insert(profileData)
+          .select()
+          .single();
+      
+      final createdProfile = UserProfile.fromJson(response);
+      print('✅ User profile created successfully: ${createdProfile.fullName}');
+      return createdProfile;
+    } catch (e) {
+      print('❌ Error creating user profile: $e');
+      return null;
+    }
+  }
+
+  // Update user profile
+  static Future<UserProfile?> updateUserProfile(UserProfile userProfile) async {
+    try {
+      final profileData = userProfile.toJson();
+      profileData['updated_at'] = DateTime.now().toIso8601String();
+
+      final response = await _client
+          .from('user_profiles')
+          .update(profileData)
+          .eq('id', userProfile.id)
+          .select()
+          .single();
+      
+      final updatedProfile = UserProfile.fromJson(response);
+      print('✅ User profile updated successfully: ${updatedProfile.fullName}');
+      return updatedProfile;
+    } catch (e) {
+      print('❌ Error updating user profile: $e');
+      return null;
+    }
+  }
+
+  // Update current user's profile
+  static Future<UserProfile?> updateCurrentUserProfile(UserProfile userProfile) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final profileData = userProfile.toJson();
+      profileData['updated_at'] = DateTime.now().toIso8601String();
+
+      final response = await _client
+          .from('user_profiles')
+          .update(profileData)
+          .eq('user_id', currentUser.id)
+          .select()
+          .single();
+      
+      final updatedProfile = UserProfile.fromJson(response);
+      print('✅ Current user profile updated successfully: ${updatedProfile.fullName}');
+      return updatedProfile;
+    } catch (e) {
+      print('❌ Error updating current user profile: $e');
+      return null;
+    }
+  }
+
+  // Delete user profile
+  static Future<bool> deleteUserProfile(String profileId) async {
+    try {
+      await _client
+          .from('user_profiles')
+          .delete()
+          .eq('id', profileId);
+      
+      print('✅ User profile deleted successfully: $profileId');
+      return true;
+    } catch (e) {
+      print('❌ Error deleting user profile: $e');
+      return false;
+    }
+  }
+
+  // Create or update current user's profile (upsert operation)
+  static Future<UserProfile?> upsertCurrentUserProfile(UserProfile userProfile) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      // Check if profile exists
+      final existingProfile = await getCurrentUserProfile();
+      
+      if (existingProfile != null) {
+        // Update existing profile
+        return await updateCurrentUserProfile(userProfile.copyWith(
+          id: existingProfile.id,
+          userId: currentUser.id,
+        ));
+      } else {
+        // Create new profile
+        return await createUserProfile(userProfile.copyWith(
+          userId: currentUser.id,
+        ));
+      }
+    } catch (e) {
+      print('❌ Error upserting current user profile: $e');
+      return null;
+    }
+  }
+
+  // Search user profiles by name
+  static Future<List<UserProfile>?> searchUserProfilesByName(String searchTerm) async {
+    try {
+      final response = await _client
+          .from('user_profiles')
+          .select('*')
+          .or('first_name.ilike.%$searchTerm%,last_name.ilike.%$searchTerm%')
+          .order('created_at', ascending: false);
+      
+      final profiles = response.map((json) => UserProfile.fromJson(json)).toList();
+      print('✅ User profiles search completed: ${profiles.length} profiles found');
+      return profiles;
+    } catch (e) {
+      print('❌ Error searching user profiles: $e');
+      return null;
+    }
+  }
+
+  // Get user profiles by subscription type
+  static Future<List<UserProfile>?> getUserProfilesBySubscription(String subscriptionType) async {
+    try {
+      final response = await _client
+          .from('user_profiles')
+          .select('*')
+          .eq('subscription_type', subscriptionType)
+          .order('created_at', ascending: false);
+      
+      final profiles = response.map((json) => UserProfile.fromJson(json)).toList();
+      print('✅ User profiles by subscription fetched successfully: ${profiles.length} $subscriptionType profiles found');
+      return profiles;
+    } catch (e) {
+      print('❌ Error fetching user profiles by subscription: $e');
+      return null;
+    }
+  }
+
+  // Update user avatar URL
+  static Future<UserProfile?> updateUserAvatar(String profileId, String avatarUrl) async {
+    try {
+      final response = await _client
+          .from('user_profiles')
+          .update({
+            'avatar_url': avatarUrl,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('id', profileId)
+          .select()
+          .single();
+      
+      final updatedProfile = UserProfile.fromJson(response);
+      print('✅ User avatar updated successfully');
+      return updatedProfile;
+    } catch (e) {
+      print('❌ Error updating user avatar: $e');
+      return null;
+    }
+  }
+
+  // Update current user's avatar
+  static Future<UserProfile?> updateCurrentUserAvatar(String avatarUrl) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('user_profiles')
+          .update({
+            'avatar_url': avatarUrl,
+            'updated_at': DateTime.now().toIso8601String(),
+          })
+          .eq('user_id', currentUser.id)
+          .select()
+          .single();
+      
+      final updatedProfile = UserProfile.fromJson(response);
+      print('✅ Current user avatar updated successfully');
+      return updatedProfile;
+    } catch (e) {
+      print('❌ Error updating current user avatar: $e');
+      return null;
     }
   }
 }
