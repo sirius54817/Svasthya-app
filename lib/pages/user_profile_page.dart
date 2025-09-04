@@ -518,7 +518,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   _userProfile!.isProfileComplete ? Colors.green : Colors.orange,
                 ),
                 if (_userProfile!.age != null)
-                  _buildStatusChip('Age', '${_userProfile!.age} years', Colors.blue),
+                  _buildStatusChip('Age', '${_userProfile!.age} years', Theme.of(context).colorScheme.primary),
                 if (_userProfile!.emergencyContact != null)
                   _buildStatusChip('Emergency', 'Contact Set', Colors.purple),
               ],

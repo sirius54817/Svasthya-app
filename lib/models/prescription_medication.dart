@@ -155,11 +155,11 @@ class PrescriptionMedication {
       return Colors.green;
     }
     
-    // As needed - variable frequency (blue)
+    // As needed - variable frequency (orange)
     if (lowerFreq.contains('as needed') || 
         lowerFreq.contains('prn') ||
         lowerFreq.contains('when required')) {
-      return Colors.blue;
+      return const Color(0xFFE67E22); // Orange - Primary theme color
     }
     
     // Default color

@@ -101,7 +101,7 @@ class Prescription {
       case 'active':
         return const Color(0xFF4CAF50); // Green
       case 'completed':
-        return const Color(0xFF2196F3); // Blue
+        return const Color(0xFFE67E22); // Orange - Primary theme color
       case 'cancelled':
         return const Color(0xFFF44336); // Red
       default:

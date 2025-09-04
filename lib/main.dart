@@ -28,6 +28,9 @@ class MyApp extends StatelessWidget {
       themeMode: ThemeMode.light, // Force light mode for entire app
       home: const AuthWrapper(),
       debugShowCheckedModeBanner: false,
+      routes: {
+        '/login': (context) => const LoginPage(),
+      },
     );
   }
 }
@@ -86,9 +89,7 @@ class MainDashboard extends StatelessWidget {
               if (shouldLogout == true) {
                 await DatabaseService.signOut();
                 if (context.mounted) {
-                  Navigator.of(context).pushReplacement(
-                    MaterialPageRoute(builder: (context) => const LoginPage()),
-                  );
+                  Navigator.of(context).pushReplacementNamed('/login');
                 }
               }
             },

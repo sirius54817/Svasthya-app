@@ -77,7 +77,7 @@ class PrescriptionExercise {
     } else if (lowerFreq.contains('twice') || lowerFreq.contains('2')) {
       return Colors.amber;
     } else {
-      return Colors.blue;
+      return const Color(0xFFE67E22); // Orange - Primary theme color
     }
   }
 
@@ -164,7 +164,7 @@ class Exercise {
     if (targetMuscles.isNotEmpty) {
       final muscle = targetMuscles.first.toLowerCase();
       if (muscle.contains('chest')) return Colors.red;
-      if (muscle.contains('back')) return Colors.blue;
+      if (muscle.contains('back')) return const Color(0xFFE67E22); // Orange - Primary theme color
       if (muscle.contains('arm') || muscle.contains('bicep') || muscle.contains('tricep')) return Colors.orange;
       if (muscle.contains('leg') || muscle.contains('quad') || muscle.contains('hamstring')) return Colors.green;
       if (muscle.contains('core') || muscle.contains('abs')) return Colors.purple;
