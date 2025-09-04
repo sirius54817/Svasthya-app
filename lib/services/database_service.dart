@@ -1,5 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user.dart' as app_models;
+import '../models/user.dart' as UserModel;
+import '../models/prescription.dart';
+import '../models/prescription_medication.dart';
 
 class DatabaseService {
   // Get Supabase client instance
@@ -8,11 +10,11 @@ class DatabaseService {
   // Getter for the client (useful for direct access if needed)
   static SupabaseClient get client => _client;
   
-  // Example: Test connection to Supabase using users table
+  // Example: Test connection to Supabase using users table (READ ONLY)
   static Future<bool> testConnection() async {
     try {
       // Simple READ query to test connection using the existing users table
-      final _ = await _client
+      final response = await _client
           .from('users')
           .select('count(*)')
           .limit(1);
@@ -24,7 +26,7 @@ class DatabaseService {
     }
   }
 
-  // TEST: Get users count
+  // TEST: Get users count (READ ONLY - safe test)
   static Future<int> getUsersCount() async {
     try {
       final response = await _client
@@ -39,75 +41,17 @@ class DatabaseService {
     }
   }
 
-  // USERS TABLE - FULL CRUD METHODS
+  // USERS TABLE - READ ONLY METHODS
   
-  // Create a new user in the users table
-  static Future<app_models.User?> createUser({
-    required String email,
-    required String role,
-  }) async {
-    try {
-      final response = await _client
-          .from('users')
-          .insert({
-            'email': email,
-            'role': role,
-          })
-          .select()
-          .single();
-      
-      final user = app_models.User.fromJson(response);
-      print('✅ User created successfully: ${user.email}');
-      return user;
-    } catch (e) {
-      print('❌ Error creating user: $e');
-      return null;
-    }
-  }
-
-  // Update user information
-  static Future<app_models.User?> updateUser(String userId, Map<String, dynamic> updates) async {
-    try {
-      final response = await _client
-          .from('users')
-          .update(updates)
-          .eq('id', userId)
-          .select()
-          .single();
-      
-      final user = app_models.User.fromJson(response);
-      print('✅ User updated successfully: ${user.email}');
-      return user;
-    } catch (e) {
-      print('❌ Error updating user: $e');
-      return null;
-    }
-  }
-
-  // Delete user
-  static Future<bool> deleteUser(String userId) async {
-    try {
-      await _client
-          .from('users')
-          .delete()
-          .eq('id', userId);
-      print('✅ User deleted successfully');
-      return true;
-    } catch (e) {
-      print('❌ Error deleting user: $e');
-      return false;
-    }
-  }
-  
-  // Get all users
-  static Future<List<app_models.User>?> getAllUsers() async {
+  // Get all users (READ ONLY)
+  static Future<List<UserModel.User>?> getAllUsers() async {
     try {
       final response = await _client
           .from('users')
           .select('*')
           .order('created_at', ascending: false);
       
-      final users = response.map((json) => app_models.User.fromJson(json)).toList();
+      final users = response.map((json) => UserModel.User.fromJson(json)).toList();
       print('✅ Users fetched successfully: ${users.length} users found');
       return users;
     } catch (e) {
@@ -116,8 +60,8 @@ class DatabaseService {
     }
   }
 
-  // Get user by ID
-  static Future<app_models.User?> getUserById(String userId) async {
+  // Get user by ID (READ ONLY)
+  static Future<UserModel.User?> getUserById(String userId) async {
     try {
       final response = await _client
           .from('users')
@@ -125,7 +69,7 @@ class DatabaseService {
           .eq('id', userId)
           .single();
       
-      final user = app_models.User.fromJson(response);
+      final user = UserModel.User.fromJson(response);
       print('✅ User fetched by ID successfully: ${user.email}');
       return user;
     } catch (e) {
@@ -134,8 +78,8 @@ class DatabaseService {
     }
   }
 
-  // Get user by email
-  static Future<app_models.User?> getUserByEmail(String email) async {
+  // Get user by email (READ ONLY)
+  static Future<UserModel.User?> getUserByEmail(String email) async {
     try {
       final response = await _client
           .from('users')
@@ -143,7 +87,7 @@ class DatabaseService {
           .eq('email', email)
           .single();
       
-      final user = app_models.User.fromJson(response);
+      final user = UserModel.User.fromJson(response);
       print('✅ User fetched by email successfully: ${user.email}');
       return user;
     } catch (e) {
@@ -152,8 +96,8 @@ class DatabaseService {
     }
   }
 
-  // Get users by role
-  static Future<List<app_models.User>?> getUsersByRole(String role) async {
+  // Get users by role (READ ONLY)
+  static Future<List<UserModel.User>?> getUsersByRole(String role) async {
     try {
       final response = await _client
           .from('users')
@@ -161,7 +105,7 @@ class DatabaseService {
           .eq('role', role)
           .order('created_at', ascending: false);
       
-      final users = response.map((json) => app_models.User.fromJson(json)).toList();
+      final users = response.map((json) => UserModel.User.fromJson(json)).toList();
       print('✅ Users by role fetched successfully: ${users.length} $role users found');
       return users;
     } catch (e) {
@@ -300,23 +244,255 @@ class DatabaseService {
   }
   
   // Get current user
-  static app_models.User? getCurrentUser() {
-    final currentUser = _client.auth.currentUser;
-    if (currentUser != null) {
-      // For a complete User object, we'd need to fetch from the users table
-      // This is a simplified version - consider using getUserByEmail() for complete data
-      return app_models.User(
-        id: currentUser.id,
-        email: currentUser.email ?? '',
-        role: 'patient', // Default role - should be fetched from database
-        createdAt: DateTime.parse(currentUser.createdAt),
-      );
-    }
-    return null;
+  static User? getCurrentUser() {
+    return _client.auth.currentUser;
   }
   
   // Check if user is authenticated
   static bool isAuthenticated() {
     return _client.auth.currentUser != null;
+  }
+
+  // PRESCRIPTIONS TABLE METHODS
+  
+  // Get all prescriptions for current patient
+  static Future<List<Prescription>?> getPatientPrescriptions() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', currentUser.id)
+          .order('created_at', ascending: false);
+      
+      final prescriptions = response.map((json) => Prescription.fromJson(json)).toList();
+      print('✅ Prescriptions fetched successfully: ${prescriptions.length} prescriptions found');
+      return prescriptions;
+    } catch (e) {
+      print('❌ Error fetching prescriptions: $e');
+      return null;
+    }
+  }
+
+  // Get prescriptions by status for current patient
+  static Future<List<Prescription>?> getPatientPrescriptionsByStatus(String status) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', currentUser.id)
+          .eq('status', status)
+          .order('created_at', ascending: false);
+      
+      final prescriptions = response.map((json) => Prescription.fromJson(json)).toList();
+      print('✅ Prescriptions by status fetched successfully: ${prescriptions.length} $status prescriptions found');
+      return prescriptions;
+    } catch (e) {
+      print('❌ Error fetching prescriptions by status: $e');
+      return null;
+    }
+  }
+
+  // Get prescriptions by type for current patient
+  static Future<List<Prescription>?> getPatientPrescriptionsByType(String type) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescriptions')
+          .select('*')
+          .eq('patient_id', currentUser.id)
+          .eq('type', type)
+          .order('created_at', ascending: false);
+      
+      final prescriptions = response.map((json) => Prescription.fromJson(json)).toList();
+      print('✅ Prescriptions by type fetched successfully: ${prescriptions.length} $type prescriptions found');
+      return prescriptions;
+    } catch (e) {
+      print('❌ Error fetching prescriptions by type: $e');
+      return null;
+    }
+  }
+
+  // Get prescription by ID
+  static Future<Prescription?> getPrescriptionById(String prescriptionId) async {
+    try {
+      final response = await _client
+          .from('prescriptions')
+          .select('*')
+          .eq('id', prescriptionId)
+          .single();
+      
+      final prescription = Prescription.fromJson(response);
+      print('✅ Prescription fetched by ID successfully');
+      return prescription;
+    } catch (e) {
+      print('❌ Error fetching prescription by ID: $e');
+      return null;
+    }
+  }
+
+  // PRESCRIPTION MEDICATIONS TABLE METHODS
+  
+  // Get all medications for current patient (across all prescriptions)
+  static Future<List<PrescriptionMedication>?> getPatientMedications() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_medications')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .order('created_at', ascending: false);
+      
+      final medications = response.map((json) => PrescriptionMedication.fromJson(json)).toList();
+      print('✅ Patient medications fetched successfully: ${medications.length} medications found');
+      return medications;
+    } catch (e) {
+      print('❌ Error fetching patient medications: $e');
+      return null;
+    }
+  }
+
+  // Get medications for a specific prescription
+  static Future<List<PrescriptionMedication>?> getMedicationsByPrescriptionId(String prescriptionId) async {
+    try {
+      final response = await _client
+          .from('prescription_medications')
+          .select('*')
+          .eq('prescription_id', prescriptionId)
+          .order('created_at', ascending: false);
+      
+      final medications = response.map((json) => PrescriptionMedication.fromJson(json)).toList();
+      print('✅ Prescription medications fetched successfully: ${medications.length} medications found');
+      return medications;
+    } catch (e) {
+      print('❌ Error fetching prescription medications: $e');
+      return null;
+    }
+  }
+
+  // Get medications by frequency (for current patient)
+  static Future<List<PrescriptionMedication>?> getPatientMedicationsByFrequency(String frequency) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_medications')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .ilike('frequency', '%$frequency%')
+          .order('created_at', ascending: false);
+      
+      final medications = response.map((json) => PrescriptionMedication.fromJson(json)).toList();
+      print('✅ Patient medications by frequency fetched successfully: ${medications.length} medications found');
+      return medications;
+    } catch (e) {
+      print('❌ Error fetching patient medications by frequency: $e');
+      return null;
+    }
+  }
+
+  // Search medications by name (for current patient)
+  static Future<List<PrescriptionMedication>?> searchPatientMedications(String searchTerm) async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_medications')
+          .select('''
+            *,
+            prescriptions!inner(patient_id)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .ilike('medication_name', '%$searchTerm%')
+          .order('created_at', ascending: false);
+      
+      final medications = response.map((json) => PrescriptionMedication.fromJson(json)).toList();
+      print('✅ Patient medications search completed: ${medications.length} medications found');
+      return medications;
+    } catch (e) {
+      print('❌ Error searching patient medications: $e');
+      return null;
+    }
+  }
+
+  // Get medication by ID
+  static Future<PrescriptionMedication?> getMedicationById(String medicationId) async {
+    try {
+      final response = await _client
+          .from('prescription_medications')
+          .select('*')
+          .eq('id', medicationId)
+          .single();
+      
+      final medication = PrescriptionMedication.fromJson(response);
+      print('✅ Medication fetched by ID successfully');
+      return medication;
+    } catch (e) {
+      print('❌ Error fetching medication by ID: $e');
+      return null;
+    }
+  }
+
+  // Get active medications (for current patient) - excludes completed courses
+  static Future<List<PrescriptionMedication>?> getActivePatientMedications() async {
+    try {
+      final currentUser = _client.auth.currentUser;
+      if (currentUser == null) {
+        print('❌ No authenticated user');
+        return null;
+      }
+
+      final response = await _client
+          .from('prescription_medications')
+          .select('''
+            *,
+            prescriptions!inner(patient_id, status)
+          ''')
+          .eq('prescriptions.patient_id', currentUser.id)
+          .eq('prescriptions.status', 'active')
+          .order('created_at', ascending: false);
+      
+      final medications = response.map((json) => PrescriptionMedication.fromJson(json)).toList();
+      print('✅ Active patient medications fetched successfully: ${medications.length} medications found');
+      return medications;
+    } catch (e) {
+      print('❌ Error fetching active patient medications: $e');
+      return null;
+    }
   }
 }

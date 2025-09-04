@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import 'prescriptions_page.dart';
+import 'prescription_medications_page.dart';
 
 class PatientHomePage extends StatefulWidget {
   const PatientHomePage({super.key});
@@ -63,13 +65,23 @@ class _PatientHomePageState extends State<PatientHomePage> {
                     icon: Icons.medication,
                     title: 'Prescription Medications',
                     subtitle: 'Manage your medications',
-                    onTap: () => _showComingSoonDialog('Prescription Medications'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PrescriptionMedicationsPage()),
+                      );
+                    },
                   ),
                   _buildNavigationCard(
                     icon: Icons.description,
                     title: 'Prescriptions',
                     subtitle: 'View all prescriptions',
-                    onTap: () => _showComingSoonDialog('Prescriptions'),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (context) => const PrescriptionsPage()),
+                      );
+                    },
                   ),
                   _buildNavigationCard(
                     icon: Icons.person,
