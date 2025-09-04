@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'config/supabase_config.dart';
-import 'widgets/supabase_test_widget.dart';
+import 'theme/app_theme.dart';
+import 'pages/login_page.dart';
+import 'services/database_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -18,97 +20,303 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Svasthya',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
-        useMaterial3: true,
-      ),
-      home: const MyHomePage(title: 'Svasthya - Health App'),
+      theme: AppTheme.lightTheme,
+      themeMode: ThemeMode.light, // Force light mode for entire app
+      home: const AuthWrapper(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
-}
-
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
-
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
-  }
+class AuthWrapper extends StatelessWidget {
+  const AuthWrapper({super.key});
 
   @override
   Widget build(BuildContext context) {
+    // Check if user is already authenticated
+    if (DatabaseService.isAuthenticated()) {
+      // TODO: Navigate to appropriate dashboard based on user role
+      return const MainDashboard();
+    } else {
+      return const LoginPage();
+    }
+  }
+}
+
+// Temporary dashboard placeholder
+class MainDashboard extends StatelessWidget {
+  const MainDashboard({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        title: Text(widget.title),
-      ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            const Text(
-              'Welcome to Svasthya!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 20),
-            const SupabaseTestWidget(),
-            const SizedBox(height: 20),
-            Card(
-              margin: const EdgeInsets.all(16),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  children: [
-                    const Text(
-                      'Counter Demo',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        title: const Text('Svasthya Dashboard'),
+        elevation: 0,
+        backgroundColor: theme.colorScheme.surface,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.logout_rounded),
+            onPressed: () async {
+              // Show confirmation dialog
+              final shouldLogout = await showDialog<bool>(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('Sign Out'),
+                  content: const Text('Are you sure you want to sign out?'),
+                  actions: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(false),
+                      child: const Text('Cancel'),
                     ),
-                    const SizedBox(height: 10),
-                    const Text('You have pushed the button this many times:'),
-                    Text(
-                      '$_counter',
-                      style: Theme.of(context).textTheme.headlineMedium,
+                    ElevatedButton(
+                      onPressed: () => Navigator.of(context).pop(true),
+                      child: const Text('Sign Out'),
                     ),
                   ],
                 ),
+              );
+              
+              if (shouldLogout == true) {
+                await DatabaseService.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushReplacement(
+                    MaterialPageRoute(builder: (context) => const LoginPage()),
+                  );
+                }
+              }
+            },
+            tooltip: 'Sign Out',
+          ),
+        ],
+      ),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Welcome Section
+            Container(
+              width: double.infinity,
+              decoration: AppTheme.primaryCardShadow,
+              padding: const EdgeInsets.all(32),
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.primaryContainer,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.health_and_safety,
+                      size: 64,
+                      color: theme.colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'Welcome to Svasthya!',
+                    style: theme.textTheme.displayMedium?.copyWith(
+                      color: theme.colorScheme.primary,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    'Healthcare Management System',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // Quick Actions Grid
+            Text(
+              'Quick Actions',
+              style: theme.textTheme.headlineSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: theme.colorScheme.onSurface,
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            GridView.count(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              crossAxisCount: 2,
+              crossAxisSpacing: 16,
+              mainAxisSpacing: 16,
+              childAspectRatio: 1.2,
+              children: [
+                _buildQuickActionCard(
+                  context,
+                  'Test Database',
+                  Icons.storage,
+                  'Verify connection',
+                  () async {
+                    final success = await DatabaseService.testConnection();
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(
+                            success 
+                              ? 'Database connection successful!' 
+                              : 'Database connection failed!',
+                          ),
+                          backgroundColor: success 
+                            ? theme.colorScheme.secondary
+                            : theme.colorScheme.error,
+                        ),
+                      );
+                    }
+                  },
+                ),
+                _buildQuickActionCard(
+                  context,
+                  'User Profile',
+                  Icons.person,
+                  'View & edit profile',
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Profile feature coming soon!'),
+                        backgroundColor: theme.colorScheme.secondary,
+                      ),
+                    );
+                  },
+                ),
+                _buildQuickActionCard(
+                  context,
+                  'Appointments',
+                  Icons.calendar_today,
+                  'Manage appointments',
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Appointments feature coming soon!'),
+                        backgroundColor: theme.colorScheme.secondary,
+                      ),
+                    );
+                  },
+                ),
+                _buildQuickActionCard(
+                  context,
+                  'Settings',
+                  Icons.settings,
+                  'App preferences',
+                  () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: const Text('Settings feature coming soon!'),
+                        backgroundColor: theme.colorScheme.secondary,
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 32),
+            
+            // Status Card
+            Container(
+              width: double.infinity,
+              decoration: AppTheme.successCardShadow,
+              padding: const EdgeInsets.all(24),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.check_circle,
+                    size: 48,
+                    color: theme.colorScheme.secondary,
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'System Status: Online',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w600,
+                      color: theme.colorScheme.secondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'All systems are operational',
+                    style: theme.textTheme.bodyMedium?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
+    );
+  }
+  
+  Widget _buildQuickActionCard(
+    BuildContext context,
+    String title,
+    IconData icon,
+    String subtitle,
+    VoidCallback onTap,
+  ) {
+    final theme = Theme.of(context);
+    
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        decoration: AppTheme.cardShadow,
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: theme.colorScheme.primaryContainer,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icon,
+                size: 32,
+                color: theme.colorScheme.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: theme.textTheme.titleMedium?.copyWith(
+                fontWeight: FontWeight.w600,
+                color: theme.colorScheme.onSurface,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: theme.textTheme.bodySmall?.copyWith(
+                color: theme.colorScheme.onSurfaceVariant,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
       ),
     );
   }

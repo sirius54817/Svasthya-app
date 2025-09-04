@@ -1,5 +1,5 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../models/user.dart';
+import '../models/user.dart' as app_models;
 
 class DatabaseService {
   // Get Supabase client instance
@@ -8,11 +8,11 @@ class DatabaseService {
   // Getter for the client (useful for direct access if needed)
   static SupabaseClient get client => _client;
   
-  // Example: Test connection to Supabase using users table (READ ONLY)
+  // Example: Test connection to Supabase using users table
   static Future<bool> testConnection() async {
     try {
       // Simple READ query to test connection using the existing users table
-      final response = await _client
+      final _ = await _client
           .from('users')
           .select('count(*)')
           .limit(1);
@@ -24,7 +24,7 @@ class DatabaseService {
     }
   }
 
-  // TEST: Get users count (READ ONLY - safe test)
+  // TEST: Get users count
   static Future<int> getUsersCount() async {
     try {
       final response = await _client
@@ -39,17 +39,75 @@ class DatabaseService {
     }
   }
 
-  // USERS TABLE - READ ONLY METHODS
+  // USERS TABLE - FULL CRUD METHODS
   
-  // Get all users (READ ONLY)
-  static Future<List<User>?> getAllUsers() async {
+  // Create a new user in the users table
+  static Future<app_models.User?> createUser({
+    required String email,
+    required String role,
+  }) async {
+    try {
+      final response = await _client
+          .from('users')
+          .insert({
+            'email': email,
+            'role': role,
+          })
+          .select()
+          .single();
+      
+      final user = app_models.User.fromJson(response);
+      print('✅ User created successfully: ${user.email}');
+      return user;
+    } catch (e) {
+      print('❌ Error creating user: $e');
+      return null;
+    }
+  }
+
+  // Update user information
+  static Future<app_models.User?> updateUser(String userId, Map<String, dynamic> updates) async {
+    try {
+      final response = await _client
+          .from('users')
+          .update(updates)
+          .eq('id', userId)
+          .select()
+          .single();
+      
+      final user = app_models.User.fromJson(response);
+      print('✅ User updated successfully: ${user.email}');
+      return user;
+    } catch (e) {
+      print('❌ Error updating user: $e');
+      return null;
+    }
+  }
+
+  // Delete user
+  static Future<bool> deleteUser(String userId) async {
+    try {
+      await _client
+          .from('users')
+          .delete()
+          .eq('id', userId);
+      print('✅ User deleted successfully');
+      return true;
+    } catch (e) {
+      print('❌ Error deleting user: $e');
+      return false;
+    }
+  }
+  
+  // Get all users
+  static Future<List<app_models.User>?> getAllUsers() async {
     try {
       final response = await _client
           .from('users')
           .select('*')
           .order('created_at', ascending: false);
       
-      final users = response.map((json) => User.fromJson(json)).toList();
+      final users = response.map((json) => app_models.User.fromJson(json)).toList();
       print('✅ Users fetched successfully: ${users.length} users found');
       return users;
     } catch (e) {
@@ -58,8 +116,8 @@ class DatabaseService {
     }
   }
 
-  // Get user by ID (READ ONLY)
-  static Future<User?> getUserById(String userId) async {
+  // Get user by ID
+  static Future<app_models.User?> getUserById(String userId) async {
     try {
       final response = await _client
           .from('users')
@@ -67,7 +125,7 @@ class DatabaseService {
           .eq('id', userId)
           .single();
       
-      final user = User.fromJson(response);
+      final user = app_models.User.fromJson(response);
       print('✅ User fetched by ID successfully: ${user.email}');
       return user;
     } catch (e) {
@@ -76,8 +134,8 @@ class DatabaseService {
     }
   }
 
-  // Get user by email (READ ONLY)
-  static Future<User?> getUserByEmail(String email) async {
+  // Get user by email
+  static Future<app_models.User?> getUserByEmail(String email) async {
     try {
       final response = await _client
           .from('users')
@@ -85,7 +143,7 @@ class DatabaseService {
           .eq('email', email)
           .single();
       
-      final user = User.fromJson(response);
+      final user = app_models.User.fromJson(response);
       print('✅ User fetched by email successfully: ${user.email}');
       return user;
     } catch (e) {
@@ -94,8 +152,8 @@ class DatabaseService {
     }
   }
 
-  // Get users by role (READ ONLY)
-  static Future<List<User>?> getUsersByRole(String role) async {
+  // Get users by role
+  static Future<List<app_models.User>?> getUsersByRole(String role) async {
     try {
       final response = await _client
           .from('users')
@@ -103,7 +161,7 @@ class DatabaseService {
           .eq('role', role)
           .order('created_at', ascending: false);
       
-      final users = response.map((json) => User.fromJson(json)).toList();
+      final users = response.map((json) => app_models.User.fromJson(json)).toList();
       print('✅ Users by role fetched successfully: ${users.length} $role users found');
       return users;
     } catch (e) {
@@ -242,8 +300,19 @@ class DatabaseService {
   }
   
   // Get current user
-  static User? getCurrentUser() {
-    return _client.auth.currentUser;
+  static app_models.User? getCurrentUser() {
+    final currentUser = _client.auth.currentUser;
+    if (currentUser != null) {
+      // For a complete User object, we'd need to fetch from the users table
+      // This is a simplified version - consider using getUserByEmail() for complete data
+      return app_models.User(
+        id: currentUser.id,
+        email: currentUser.email ?? '',
+        role: 'patient', // Default role - should be fetched from database
+        createdAt: DateTime.parse(currentUser.createdAt),
+      );
+    }
+    return null;
   }
   
   // Check if user is authenticated
