@@ -29,12 +29,15 @@ class QuickPoseService {
   Duration get duration => _duration;
 
   Future<void> initialize() async {
+    // Always initialize ML Kit service - it's safe to call multiple times
     await _mlkitService.initialize();
     
-    // Listen to pose stream from ML Kit service
-    _poseSubscription = _mlkitService.poseStream.listen((poses) {
-      _processPoses(poses);
-    });
+    // Only set up subscription if not already listening
+    if (_poseSubscription == null) {
+      _poseSubscription = _mlkitService.poseStream.listen((poses) {
+        _processPoses(poses);
+      });
+    }
   }
 
   void _processPoses(List<Pose> poses) {
@@ -189,9 +192,19 @@ class QuickPoseService {
   }
 
   void dispose() {
-    _poseStreamController.close();
+    // Only cancel timers and subscriptions, don't dispose the singleton
     _durationTimer?.cancel();
+    _durationTimer = null;
     _poseSubscription?.cancel();
-    _mlkitService.dispose();
+    _poseSubscription = null;
+    
+    // Reset tracking state
+    _isTracking = false;
+    _currentExercise = '';
+    _reps = 0;
+    _duration = Duration.zero;
+    
+    // Don't close the stream controller as it's used by multiple pages
+    // and don't dispose ML Kit service as it's also a singleton
   }
 }

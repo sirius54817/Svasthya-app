@@ -32,23 +32,37 @@ class MLKitPoseService {
   Future<void> initialize() async {
     if (_isInitialized) return;
 
-    // Configure pose detection options
-    final options = PoseDetectorOptions(
-      mode: PoseDetectionMode.stream,
-      model: PoseDetectionModel.accurate,
-    );
+    try {
+      // Configure pose detection options
+      final options = PoseDetectorOptions(
+        mode: PoseDetectionMode.stream,
+        model: PoseDetectionModel.accurate,
+      );
 
-    _poseDetector = PoseDetector(options: options);
-    _isInitialized = true;
+      _poseDetector = PoseDetector(options: options);
+      _isInitialized = true;
+      print('MLKitPoseService initialized successfully');
+    } catch (e) {
+      print('Error initializing MLKitPoseService: $e');
+      _isInitialized = false;
+      rethrow;
+    }
   }
 
   Future<void> dispose() async {
+    // Only dispose if explicitly called - this is a singleton service
+    // Don't dispose automatically from page dispose methods
     if (!_isInitialized) return;
 
-    await _poseDetector.close();
-    await _poseStreamController.close();
-    _durationTimer?.cancel();
-    _isInitialized = false;
+    try {
+      await _poseDetector.close();
+      await _poseStreamController.close();
+      _durationTimer?.cancel();
+      _isInitialized = false;
+      print('MLKitPoseService disposed');
+    } catch (e) {
+      print('Error disposing MLKitPoseService: $e');
+    }
   }
 
   Future<void> processImage(CameraImage image) async {

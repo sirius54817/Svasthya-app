@@ -53,12 +53,16 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
     _exerciseUpdateSubscription?.cancel();
     _poseStreamSubscription?.cancel();
     _cameraController?.dispose();
-    _quickPoseService.dispose();
+    // Don't dispose the singleton service, just stop current exercise if tracking
+    if (_isTracking) {
+      _quickPoseService.stopExercise();
+    }
     super.dispose();
   }
 
   Future<void> _initializeQuickPose() async {
     try {
+      // Always initialize the service to ensure it's ready
       await _quickPoseService.initialize();
       
       // Listen to pose stream for real-time skeleton data
