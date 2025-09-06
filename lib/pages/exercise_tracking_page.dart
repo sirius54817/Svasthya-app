@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../models/prescription_exercise.dart';
 import '../services/quickpose_service.dart';
 import '../widgets/pose_overlay_painter.dart';
+import '../widgets/corner_skeleton_painter.dart';
 
 class ExerciseTrackingPage extends StatefulWidget {
   final Exercise exercise;
@@ -26,6 +27,7 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
   bool _isTracking = false;
   bool _hasPerson = false;
   bool _showSkeleton = true;
+  bool _skeletonInCorner = false; // New option for bottom-right positioning
   
   int _repetitions = 0;
   double _accuracy = 0.0;
@@ -308,10 +310,21 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
           // Camera preview
           CameraPreview(_cameraController!),
           
-          // Skeleton overlay
-          if (_showSkeleton && _currentKeypoints.isNotEmpty)
+          // Full overlay skeleton (when not in corner mode)
+          if (_showSkeleton && !_skeletonInCorner && _currentKeypoints.isNotEmpty)
             CustomPaint(
               painter: PoseOverlayPainter(
+                keypoints: _currentKeypoints,
+                connections: PoseConnections.humanSkeleton,
+                cameraSize: _cameraController!.value.previewSize ?? const Size(1, 1),
+              ),
+              size: Size.infinite,
+            ),
+          
+          // Corner skeleton (when in corner mode)
+          if (_showSkeleton && _skeletonInCorner && _currentKeypoints.isNotEmpty)
+            CustomPaint(
+              painter: CornerSkeletonPainter(
                 keypoints: _currentKeypoints,
                 connections: PoseConnections.humanSkeleton,
                 cameraSize: _cameraController!.value.previewSize ?? const Size(1, 1),
@@ -438,6 +451,20 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
                 });
               },
               tooltip: _showSkeleton ? 'Hide Skeleton' : 'Show Skeleton',
+            ),
+          
+          // Skeleton position toggle button
+          if (_cameraController != null && _cameraController!.value.isInitialized && _showSkeleton)
+            IconButton(
+              icon: Icon(
+                _skeletonInCorner ? Icons.picture_in_picture : Icons.fullscreen,
+              ),
+              onPressed: () {
+                setState(() {
+                  _skeletonInCorner = !_skeletonInCorner;
+                });
+              },
+              tooltip: _skeletonInCorner ? 'Full Screen Skeleton' : 'Corner Skeleton',
             ),
         ],
       ),

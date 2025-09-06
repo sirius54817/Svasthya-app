@@ -41,6 +41,9 @@ class PoseOverlayPainter extends CustomPainter {
       offsetY = (size.height - (cameraSize.height * scaleY)) / 2;
     }
 
+    // Transform keypoints for proper orientation
+    final transformedKeypoints = _transformKeypoints(keypoints, size, scaleX, scaleY, offsetX, offsetY);
+
     // Paint for keypoints (joints)
     final keypointPaint = Paint()
       ..color = Colors.cyan
@@ -59,24 +62,18 @@ class PoseOverlayPainter extends CustomPainter {
 
     // Draw connections (skeleton lines) first
     for (final connection in connections) {
-      final startKeypoint = keypoints.firstWhere(
+      final startKeypoint = transformedKeypoints.firstWhere(
         (kp) => kp.type == connection.startJoint,
         orElse: () => PoseKeypoint.empty(),
       );
-      final endKeypoint = keypoints.firstWhere(
+      final endKeypoint = transformedKeypoints.firstWhere(
         (kp) => kp.type == connection.endJoint,
         orElse: () => PoseKeypoint.empty(),
       );
 
       if (startKeypoint.isValid && endKeypoint.isValid) {
-        final startPoint = Offset(
-          (startKeypoint.x * scaleX) + offsetX,
-          (startKeypoint.y * scaleY) + offsetY,
-        );
-        final endPoint = Offset(
-          (endKeypoint.x * scaleX) + offsetX,
-          (endKeypoint.y * scaleY) + offsetY,
-        );
+        final startPoint = Offset(startKeypoint.x, startKeypoint.y);
+        final endPoint = Offset(endKeypoint.x, endKeypoint.y);
 
         // Use different colors for different body parts
         connectionPaint.color = _getConnectionColor(connection.bodyPart);
@@ -85,12 +82,9 @@ class PoseOverlayPainter extends CustomPainter {
     }
 
     // Draw keypoints (joints) on top
-    for (final keypoint in keypoints) {
+    for (final keypoint in transformedKeypoints) {
       if (keypoint.isValid) {
-        final point = Offset(
-          (keypoint.x * scaleX) + offsetX,
-          (keypoint.y * scaleY) + offsetY,
-        );
+        final point = Offset(keypoint.x, keypoint.y);
 
         // Use different paint based on confidence
         final paint = keypoint.confidence > 0.7 ? highConfidencePaint : keypointPaint;
@@ -105,7 +99,39 @@ class PoseOverlayPainter extends CustomPainter {
     }
 
     // Draw exercise-specific indicators
-    _drawExerciseIndicators(canvas, size, scaleX, scaleY, offsetX, offsetY);
+    _drawExerciseIndicators(canvas, size, transformedKeypoints);
+  }
+
+  List<PoseKeypoint> _transformKeypoints(List<PoseKeypoint> originalKeypoints, Size size, double scaleX, double scaleY, double offsetX, double offsetY) {
+    final transformedKeypoints = <PoseKeypoint>[];
+    
+    for (final keypoint in originalKeypoints) {
+      if (keypoint.isValid) {
+        // Apply coordinate transformation to fix orientation
+        double transformedX, transformedY;
+        
+        // Check if we need to rotate the coordinates (camera is typically in landscape)
+        if (cameraSize.width > cameraSize.height) {
+          // Camera is landscape, transform to portrait
+          // Rotate 90 degrees clockwise and flip to fix upside-down issue
+          transformedX = (keypoint.y * scaleX) + offsetX;
+          transformedY = (keypoint.x * scaleY) + offsetY;
+        } else {
+          // Camera is already portrait, just apply scaling
+          transformedX = (keypoint.x * scaleX) + offsetX;
+          transformedY = (keypoint.y * scaleY) + offsetY;
+        }
+        
+        transformedKeypoints.add(PoseKeypoint(
+          type: keypoint.type,
+          x: transformedX,
+          y: transformedY,
+          confidence: keypoint.confidence,
+        ));
+      }
+    }
+    
+    return transformedKeypoints;
   }
 
   Color _getConnectionColor(BodyPart bodyPart) {
@@ -127,7 +153,7 @@ class PoseOverlayPainter extends CustomPainter {
     }
   }
 
-  void _drawExerciseIndicators(Canvas canvas, Size size, double scaleX, double scaleY, double offsetX, double offsetY) {
+  void _drawExerciseIndicators(Canvas canvas, Size size, List<PoseKeypoint> transformedKeypoints) {
     // Draw form feedback indicators
     final feedbackPaint = Paint()
       ..color = Colors.red.withOpacity(0.6)
@@ -135,25 +161,19 @@ class PoseOverlayPainter extends CustomPainter {
       ..strokeWidth = 2.0;
 
     // Example: Draw alignment guides for squats
-    final leftKnee = keypoints.firstWhere(
+    final leftKnee = transformedKeypoints.firstWhere(
       (kp) => kp.type == KeypointType.leftKnee,
       orElse: () => PoseKeypoint.empty(),
     );
-    final rightKnee = keypoints.firstWhere(
+    final rightKnee = transformedKeypoints.firstWhere(
       (kp) => kp.type == KeypointType.rightKnee,
       orElse: () => PoseKeypoint.empty(),
     );
 
     if (leftKnee.isValid && rightKnee.isValid) {
       // Draw knee alignment guide
-      final leftKneePoint = Offset(
-        (leftKnee.x * scaleX) + offsetX, 
-        (leftKnee.y * scaleY) + offsetY
-      );
-      final rightKneePoint = Offset(
-        (rightKnee.x * scaleX) + offsetX, 
-        (rightKnee.y * scaleY) + offsetY
-      );
+      final leftKneePoint = Offset(leftKnee.x, leftKnee.y);
+      final rightKneePoint = Offset(rightKnee.x, rightKnee.y);
       
       canvas.drawLine(leftKneePoint, rightKneePoint, feedbackPaint);
       

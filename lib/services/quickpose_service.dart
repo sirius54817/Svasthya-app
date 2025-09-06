@@ -23,6 +23,12 @@ class QuickPoseService {
   Timer? _durationTimer;
   StreamSubscription<List<Pose>>? _poseSubscription;
 
+  // Rep counting state
+  String _currentPhase = 'ready'; // 'ready', 'down', 'up'
+  double _lastAngle = 0.0;
+  int _framesSinceLastRep = 0;
+  final int _minFramesBetweenReps = 30; // Prevent counting too fast
+
   bool get isTracking => _isTracking;
   String get currentExercise => _currentExercise;
   int get reps => _reps;
@@ -43,6 +49,8 @@ class QuickPoseService {
   void _processPoses(List<Pose> poses) {
     if (!_isTracking) return;
 
+    _framesSinceLastRep++;
+
     // Convert poses to landmarks format expected by UI
     final landmarks = <String, Map<String, double>>{};
     
@@ -59,9 +67,10 @@ class QuickPoseService {
         };
       }
 
-      // Basic rep counting logic
+      // Advanced rep counting logic based on exercise type
       if (_canCountRep(landmarks)) {
         _reps++;
+        _framesSinceLastRep = 0;
       }
     }
 
@@ -150,17 +159,68 @@ class QuickPoseService {
   }
 
   bool _canCountRep(Map<String, Map<String, double>> landmarks) {
-    // Simple rep counting logic - you can enhance this for specific exercises
+    // Prevent counting too frequently
+    if (_framesSinceLastRep < _minFramesBetweenReps) return false;
+
+    // Get required landmarks for sit-up detection
     final leftShoulder = landmarks['left_shoulder'];
     final rightShoulder = landmarks['right_shoulder'];
+    final leftHip = landmarks['left_hip'];
+    final rightHip = landmarks['right_hip'];
+    final leftKnee = landmarks['left_knee'];
+    final rightKnee = landmarks['right_knee'];
     
-    if (leftShoulder == null || rightShoulder == null) return false;
+    if (leftShoulder == null || rightShoulder == null || 
+        leftHip == null || rightHip == null ||
+        leftKnee == null || rightKnee == null) return false;
     
-    // Check if both shoulders are visible with high confidence
-    final leftVisibility = leftShoulder['visibility'] ?? 0.0;
-    final rightVisibility = rightShoulder['visibility'] ?? 0.0;
+    // Check if all required landmarks are visible with high confidence
+    final minConfidence = 0.6;
+    if ((leftShoulder['visibility'] ?? 0.0) < minConfidence ||
+        (rightShoulder['visibility'] ?? 0.0) < minConfidence ||
+        (leftHip['visibility'] ?? 0.0) < minConfidence ||
+        (rightHip['visibility'] ?? 0.0) < minConfidence ||
+        (leftKnee['visibility'] ?? 0.0) < minConfidence ||
+        (rightKnee['visibility'] ?? 0.0) < minConfidence) return false;
+
+    // Calculate torso angle for sit-up detection
+    final shoulderY = (leftShoulder['y']! + rightShoulder['y']!) / 2;
+    final hipY = (leftHip['y']! + rightHip['y']!) / 2;
+    final kneeY = (leftKnee['y']! + rightKnee['y']!) / 2;
     
-    return leftVisibility > 0.7 && rightVisibility > 0.7;
+    // Calculate the angle between torso and legs
+    final torsoLength = (shoulderY - hipY).abs();
+    final legLength = (hipY - kneeY).abs();
+    
+    // Use relative positions to determine sit-up phases
+    final isLayingDown = shoulderY > hipY + (torsoLength * 0.3); // Shoulders lower than hips
+    final isSittingUp = shoulderY < hipY - (torsoLength * 0.1); // Shoulders higher than hips
+    
+    bool repCompleted = false;
+    
+    // State machine for sit-up detection
+    switch (_currentPhase) {
+      case 'ready':
+        if (isLayingDown) {
+          _currentPhase = 'down';
+        }
+        break;
+        
+      case 'down':
+        if (isSittingUp) {
+          _currentPhase = 'up';
+        }
+        break;
+        
+      case 'up':
+        if (isLayingDown) {
+          _currentPhase = 'down';
+          repCompleted = true; // Complete sit-up cycle
+        }
+        break;
+    }
+    
+    return repCompleted;
   }
 
   Future<void> processImage(CameraImage image) async {
@@ -172,6 +232,11 @@ class QuickPoseService {
     _reps = 0;
     _duration = Duration.zero;
     _isTracking = true;
+    
+    // Reset rep counting state
+    _currentPhase = 'ready';
+    _lastAngle = 0.0;
+    _framesSinceLastRep = 0;
     
     // Start duration timer
     _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
