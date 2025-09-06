@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/database_service.dart';
+import '../widgets/simple_chatbot.dart';
 import 'prescriptions_page.dart';
 import 'prescription_medications_page.dart';
 import 'prescription_exercises_page.dart';
@@ -21,6 +22,21 @@ class _PatientHomePageState extends State<PatientHomePage> {
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
+          IconButton(
+            onPressed: _showChatbot,
+            icon: ClipRRect(
+              borderRadius: BorderRadius.circular(12),
+              child: Image.asset(
+                'assets/images/app_logo.jpg',
+                width: 24,
+                height: 24,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return const Icon(Icons.chat);
+                },
+              ),
+            ),
+          ),
           IconButton(
             onPressed: _signOut,
             icon: const Icon(Icons.logout),
@@ -164,6 +180,13 @@ class _PatientHomePageState extends State<PatientHomePage> {
           ),
         ),
       ),
+    );
+  }
+
+  void _showChatbot() {
+    showDialog(
+      context: context,
+      builder: (context) => const SimpleChatbot(),
     );
   }
 
