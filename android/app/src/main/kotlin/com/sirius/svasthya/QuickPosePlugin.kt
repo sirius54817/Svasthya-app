@@ -220,7 +220,9 @@ class QuickPosePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHan
                             "Keep your back straight",
                             "Great form!",
                             "Slow down the movement",
-                            "Full range of motion"
+                            "Full range of motion",
+                            "Perfect alignment!",
+                            "Engage your core"
                         )
                         val newFeedback = feedbackMessages.random()
                         if (!feedback.contains(newFeedback)) {
@@ -228,12 +230,16 @@ class QuickPosePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHan
                         }
                     }
                     
+                    // Generate simulated pose keypoints
+                    val simulatedPose = generateSimulatedPoseKeypoints()
+                    
                     // Send update to Flutter
                     val update = mapOf(
                         "repetitions" to repetitions,
                         "accuracy" to accuracy,
                         "feedback" to feedback.lastOrNull(),
-                        "isTracking" to isTracking
+                        "isTracking" to isTracking,
+                        "poseKeypoints" to simulatedPose
                     )
                     
                     mainHandler.post {
@@ -241,11 +247,103 @@ class QuickPosePlugin : FlutterPlugin, MethodCallHandler, EventChannel.StreamHan
                     }
                     
                     // Schedule next update
-                    mainHandler.postDelayed(this, 1000) // Update every second
+                    mainHandler.postDelayed(this, 500) // Update every 500ms for smoother animation
                 }
             }
         }
         
-        mainHandler.postDelayed(updateRunnable, 1000)
+        mainHandler.postDelayed(updateRunnable, 500)
+    }
+
+    private fun generateSimulatedPoseKeypoints(): List<Map<String, Any>> {
+        // Generate realistic pose keypoints with slight random movement
+        // Use camera resolution coordinates (typical: 1920x1080 for back camera)
+        val time = System.currentTimeMillis() / 1000.0
+        val breathingEffect = (Math.sin(time * 2) * 8).toFloat() // Simulate breathing
+        val naturalMovement = (Math.sin(time * 0.5) * 15).toFloat() // Natural body sway
+        
+        // Center the pose in the frame
+        val centerX = 960f // Half of 1920
+        val centerY = 540f // Half of 1080
+        
+        return listOf(
+            // Head keypoints - positioned at top center
+            createKeypoint("nose", centerX + naturalMovement, 150f + breathingEffect, 0.95f),
+            createKeypoint("leftEye", centerX - 30f + naturalMovement, 130f + breathingEffect, 0.92f),
+            createKeypoint("rightEye", centerX + 30f + naturalMovement, 130f + breathingEffect, 0.92f),
+            createKeypoint("leftEar", centerX - 50f + naturalMovement, 140f + breathingEffect, 0.88f),
+            createKeypoint("rightEar", centerX + 50f + naturalMovement, 140f + breathingEffect, 0.88f),
+            
+            // Torso keypoints - properly spaced for human proportions
+            createKeypoint("leftShoulder", centerX - 120f + naturalMovement, 250f + breathingEffect, 0.96f),
+            createKeypoint("rightShoulder", centerX + 120f + naturalMovement, 250f + breathingEffect, 0.96f),
+            createKeypoint("leftHip", centerX - 80f + naturalMovement, 480f + breathingEffect * 0.5f, 0.94f),
+            createKeypoint("rightHip", centerX + 80f + naturalMovement, 480f + breathingEffect * 0.5f, 0.94f),
+            
+            // Arm keypoints - simulate exercise movement with proper proportions
+            createKeypoint("leftElbow", centerX - 180f + naturalMovement + getExerciseMovement("leftElbow", time), 350f + breathingEffect, 0.91f),
+            createKeypoint("rightElbow", centerX + 180f + naturalMovement + getExerciseMovement("rightElbow", time), 350f + breathingEffect, 0.91f),
+            createKeypoint("leftWrist", centerX - 220f + naturalMovement + getExerciseMovement("leftWrist", time), 420f + breathingEffect, 0.89f),
+            createKeypoint("rightWrist", centerX + 220f + naturalMovement + getExerciseMovement("rightWrist", time), 420f + breathingEffect, 0.89f),
+            
+            // Leg keypoints - positioned for full body view
+            createKeypoint("leftKnee", centerX - 60f + naturalMovement, 680f + getExerciseMovement("leftKnee", time), 0.93f),
+            createKeypoint("rightKnee", centerX + 60f + naturalMovement, 680f + getExerciseMovement("rightKnee", time), 0.93f),
+            createKeypoint("leftAnkle", centerX - 40f + naturalMovement, 900f + getExerciseMovement("leftAnkle", time), 0.87f),
+            createKeypoint("rightAnkle", centerX + 40f + naturalMovement, 900f + getExerciseMovement("rightAnkle", time), 0.87f),
+        )
+    }
+
+    private fun createKeypoint(type: String, x: Float, y: Float, confidence: Float): Map<String, Any> {
+        return mapOf(
+            "type" to type,
+            "x" to x.toDouble(),
+            "y" to y.toDouble(),
+            "confidence" to confidence.toDouble()
+        )
+    }
+
+    private fun getExerciseMovement(joint: String, time: Double): Float {
+        // Simulate different exercise movements based on current exercise
+        return when (currentExercise?.lowercase()) {
+            "push up", "push-up", "pushup" -> {
+                when (joint) {
+                    "leftElbow", "rightElbow" -> (Math.sin(time * 1.5) * 50).toFloat()
+                    "leftWrist", "rightWrist" -> (Math.sin(time * 1.5) * 70).toFloat()
+                    else -> 0f
+                }
+            }
+            "squat", "squats" -> {
+                when (joint) {
+                    "leftKnee", "rightKnee" -> (Math.sin(time * 1.2) * 80).toFloat()
+                    "leftAnkle", "rightAnkle" -> (Math.sin(time * 1.2) * 20).toFloat()
+                    else -> 0f
+                }
+            }
+            "lunge", "lunges" -> {
+                when (joint) {
+                    "leftKnee" -> (Math.sin(time * 1.0) * 100).toFloat()
+                    "rightKnee" -> (Math.sin(time * 1.0 + Math.PI) * 60).toFloat()
+                    "leftAnkle" -> (Math.sin(time * 1.0) * 30).toFloat()
+                    "rightAnkle" -> (Math.sin(time * 1.0 + Math.PI) * 20).toFloat()
+                    else -> 0f
+                }
+            }
+            "bicep curl", "bicep curls" -> {
+                when (joint) {
+                    "leftElbow", "rightElbow" -> (Math.sin(time * 2) * 80).toFloat()
+                    "leftWrist", "rightWrist" -> (Math.sin(time * 2) * 100).toFloat()
+                    else -> 0f
+                }
+            }
+            "plank" -> {
+                // Minimal movement for plank hold
+                when (joint) {
+                    "leftElbow", "rightElbow", "leftWrist", "rightWrist" -> (Math.sin(time * 3) * 5).toFloat()
+                    else -> 0f
+                }
+            }
+            else -> (Math.sin(time) * 15).toFloat() // General movement
+        }
     }
 }

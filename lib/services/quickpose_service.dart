@@ -1,171 +1,197 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
+import 'dart:async';
 import 'package:camera/camera.dart';
-import 'package:permission_handler/permission_handler.dart';
+import 'package:google_mlkit_pose_detection/google_mlkit_pose_detection.dart';
+import 'mlkit_pose_service.dart';
 
 class QuickPoseService {
-  static const String _sdkKey = '01K4DKC13739EYV3FC1PGAD5P9';
-  static const MethodChannel _channel = MethodChannel('quickpose_flutter');
-  static bool _isInitialized = false;
+  static QuickPoseService? _instance;
+  static QuickPoseService get instance => _instance ??= QuickPoseService._();
+  
+  QuickPoseService._();
 
-  // Initialize QuickPose SDK
-  static Future<bool> initialize() async {
-    try {
-      if (_isInitialized) return true;
+  final MLKitPoseService _mlkitService = MLKitPoseService.instance;
+  
+  // Stream controllers for pose data
+  final StreamController<Map<String, dynamic>> _poseStreamController = StreamController<Map<String, dynamic>>.broadcast();
+  Stream<Map<String, dynamic>> get poseStream => _poseStreamController.stream;
 
-      // Initialize QuickPose with SDK key via platform channel
-      final result = await _channel.invokeMethod('initialize', {
-        'sdkKey': _sdkKey,
-      });
+  // Exercise tracking state
+  bool _isTracking = false;
+  String _currentExercise = '';
+  int _reps = 0;
+  Duration _duration = Duration.zero;
+  Timer? _durationTimer;
+  StreamSubscription<List<Pose>>? _poseSubscription;
+
+  bool get isTracking => _isTracking;
+  String get currentExercise => _currentExercise;
+  int get reps => _reps;
+  Duration get duration => _duration;
+
+  Future<void> initialize() async {
+    await _mlkitService.initialize();
+    
+    // Listen to pose stream from ML Kit service
+    _poseSubscription = _mlkitService.poseStream.listen((poses) {
+      _processPoses(poses);
+    });
+  }
+
+  void _processPoses(List<Pose> poses) {
+    if (!_isTracking) return;
+
+    // Convert poses to landmarks format expected by UI
+    final landmarks = <String, Map<String, double>>{};
+    
+    if (poses.isNotEmpty) {
+      final pose = poses.first;
       
-      _isInitialized = result == true;
-      debugPrint('✅ QuickPose SDK initialized successfully');
-      return _isInitialized;
-    } catch (e) {
-      debugPrint('❌ Failed to initialize QuickPose SDK: $e');
-      return false;
-    }
-  }
-
-  // Check and request camera permissions
-  static Future<bool> requestCameraPermission() async {
-    try {
-      final status = await Permission.camera.request();
-      return status == PermissionStatus.granted;
-    } catch (e) {
-      debugPrint('❌ Failed to request camera permission: $e');
-      return false;
-    }
-  }
-
-  // Get available cameras
-  static Future<List<CameraDescription>> getAvailableCameras() async {
-    try {
-      return await availableCameras();
-    } catch (e) {
-      debugPrint('❌ Failed to get available cameras: $e');
-      return [];
-    }
-  }
-
-  // Start exercise tracking session
-  static Future<bool> startExerciseTracking(String exerciseName) async {
-    try {
-      if (!_isInitialized) {
-        await initialize();
+      for (final landmark in pose.landmarks.values) {
+        String landmarkName = _getLandmarkName(landmark.type);
+        landmarks[landmarkName] = {
+          'x': landmark.x,
+          'y': landmark.y,
+          'z': landmark.z ?? 0.0,
+          'visibility': landmark.likelihood,
+        };
       }
 
-      // Configure exercise-specific pose detection
-      final exerciseType = _getExerciseType(exerciseName);
-      
-      final result = await _channel.invokeMethod('startTracking', {
-        'exerciseType': exerciseType.name,
-        'exerciseName': exerciseName,
-      });
-      
-      debugPrint('✅ Started exercise tracking for: $exerciseName');
-      return result == true;
-    } catch (e) {
-      debugPrint('❌ Failed to start exercise tracking: $e');
-      return false;
-    }
-  }
-
-  // Stop exercise tracking
-  static Future<void> stopExerciseTracking() async {
-    try {
-      await _channel.invokeMethod('stopTracking');
-      debugPrint('✅ Stopped exercise tracking');
-    } catch (e) {
-      debugPrint('❌ Failed to stop exercise tracking: $e');
-    }
-  }
-
-  // Get exercise results/statistics
-  static Future<ExerciseResults?> getExerciseResults() async {
-    try {
-      final result = await _channel.invokeMethod('getResults');
-      if (result != null) {
-        return ExerciseResults.fromJson(Map<String, dynamic>.from(result));
+      // Basic rep counting logic
+      if (_canCountRep(landmarks)) {
+        _reps++;
       }
-      return null;
-    } catch (e) {
-      debugPrint('❌ Failed to get exercise results: $e');
-      return null;
+    }
+
+    final poseData = {
+      'landmarks': landmarks,
+      'reps': _reps,
+      'duration': _duration.inSeconds,
+      'exercise': _currentExercise,
+      'hasPerson': poses.isNotEmpty,
+    };
+
+    _poseStreamController.add(poseData);
+  }
+
+  String _getLandmarkName(PoseLandmarkType type) {
+    switch (type) {
+      case PoseLandmarkType.nose:
+        return 'nose';
+      case PoseLandmarkType.leftEyeInner:
+        return 'left_eye_inner';
+      case PoseLandmarkType.leftEye:
+        return 'left_eye';
+      case PoseLandmarkType.leftEyeOuter:
+        return 'left_eye_outer';
+      case PoseLandmarkType.rightEyeInner:
+        return 'right_eye_inner';
+      case PoseLandmarkType.rightEye:
+        return 'right_eye';
+      case PoseLandmarkType.rightEyeOuter:
+        return 'right_eye_outer';
+      case PoseLandmarkType.leftEar:
+        return 'left_ear';
+      case PoseLandmarkType.rightEar:
+        return 'right_ear';
+      case PoseLandmarkType.leftMouth:
+        return 'mouth_left';
+      case PoseLandmarkType.rightMouth:
+        return 'mouth_right';
+      case PoseLandmarkType.leftShoulder:
+        return 'left_shoulder';
+      case PoseLandmarkType.rightShoulder:
+        return 'right_shoulder';
+      case PoseLandmarkType.leftElbow:
+        return 'left_elbow';
+      case PoseLandmarkType.rightElbow:
+        return 'right_elbow';
+      case PoseLandmarkType.leftWrist:
+        return 'left_wrist';
+      case PoseLandmarkType.rightWrist:
+        return 'right_wrist';
+      case PoseLandmarkType.leftPinky:
+        return 'left_pinky';
+      case PoseLandmarkType.rightPinky:
+        return 'right_pinky';
+      case PoseLandmarkType.leftIndex:
+        return 'left_index';
+      case PoseLandmarkType.rightIndex:
+        return 'right_index';
+      case PoseLandmarkType.leftThumb:
+        return 'left_thumb';
+      case PoseLandmarkType.rightThumb:
+        return 'right_thumb';
+      case PoseLandmarkType.leftHip:
+        return 'left_hip';
+      case PoseLandmarkType.rightHip:
+        return 'right_hip';
+      case PoseLandmarkType.leftKnee:
+        return 'left_knee';
+      case PoseLandmarkType.rightKnee:
+        return 'right_knee';
+      case PoseLandmarkType.leftAnkle:
+        return 'left_ankle';
+      case PoseLandmarkType.rightAnkle:
+        return 'right_ankle';
+      case PoseLandmarkType.leftHeel:
+        return 'left_heel';
+      case PoseLandmarkType.rightHeel:
+        return 'right_heel';
+      case PoseLandmarkType.leftFootIndex:
+        return 'left_foot_index';
+      case PoseLandmarkType.rightFootIndex:
+        return 'right_foot_index';
+      default:
+        return 'unknown';
     }
   }
 
-  // Listen to real-time updates
-  static Stream<Map<String, dynamic>> get exerciseUpdates {
-    return const EventChannel('quickpose_flutter/updates')
-        .receiveBroadcastStream()
-        .map((event) => Map<String, dynamic>.from(event));
-  }
-
-  // Determine exercise type from name
-  static ExerciseType _getExerciseType(String exerciseName) {
-    final name = exerciseName.toLowerCase();
+  bool _canCountRep(Map<String, Map<String, double>> landmarks) {
+    // Simple rep counting logic - you can enhance this for specific exercises
+    final leftShoulder = landmarks['left_shoulder'];
+    final rightShoulder = landmarks['right_shoulder'];
     
-    if (name.contains('push') && name.contains('up')) {
-      return ExerciseType.pushUp;
-    } else if (name.contains('squat')) {
-      return ExerciseType.squat;
-    } else if (name.contains('lunge')) {
-      return ExerciseType.lunge;
-    } else if (name.contains('plank')) {
-      return ExerciseType.plank;
-    } else if (name.contains('curl') && (name.contains('bicep') || name.contains('arm'))) {
-      return ExerciseType.bicepCurl;
-    }
+    if (leftShoulder == null || rightShoulder == null) return false;
     
-    return ExerciseType.general;
+    // Check if both shoulders are visible with high confidence
+    final leftVisibility = leftShoulder['visibility'] ?? 0.0;
+    final rightVisibility = rightShoulder['visibility'] ?? 0.0;
+    
+    return leftVisibility > 0.7 && rightVisibility > 0.7;
   }
 
-  // Dispose resources
-  static Future<void> dispose() async {
-    try {
-      await _channel.invokeMethod('dispose');
-      _isInitialized = false;
-      debugPrint('✅ QuickPose service disposed');
-    } catch (e) {
-      debugPrint('❌ Failed to dispose QuickPose service: $e');
-    }
+  Future<void> processImage(CameraImage image) async {
+    await _mlkitService.processImage(image);
   }
-}
 
-// Exercise types supported by QuickPose
-enum ExerciseType {
-  pushUp,
-  squat,
-  lunge,
-  plank,
-  bicepCurl,
-  general,
-}
+  void startExercise(String exerciseName) {
+    _currentExercise = exerciseName;
+    _reps = 0;
+    _duration = Duration.zero;
+    _isTracking = true;
+    
+    // Start duration timer
+    _durationTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      _duration = Duration(seconds: _duration.inSeconds + 1);
+    });
 
-// Exercise results data class
-class ExerciseResults {
-  final int repetitions;
-  final double accuracy;
-  final Duration duration;
-  final List<String> feedback;
-  final Map<String, dynamic> analytics;
+    // Start exercise tracking in ML Kit service
+    _mlkitService.startExercise(exerciseName);
+  }
 
-  ExerciseResults({
-    required this.repetitions,
-    required this.accuracy,
-    required this.duration,
-    required this.feedback,
-    required this.analytics,
-  });
+  void stopExercise() {
+    _isTracking = false;
+    _durationTimer?.cancel();
+    _currentExercise = '';
+    
+    // Stop exercise tracking in ML Kit service
+    _mlkitService.stopExercise();
+  }
 
-  factory ExerciseResults.fromJson(Map<String, dynamic> json) {
-    return ExerciseResults(
-      repetitions: json['repetitions'] ?? 0,
-      accuracy: (json['accuracy'] ?? 0.0).toDouble(),
-      duration: Duration(seconds: json['duration'] ?? 0),
-      feedback: List<String>.from(json['feedback'] ?? []),
-      analytics: json['analytics'] ?? {},
-    );
+  void dispose() {
+    _poseStreamController.close();
+    _durationTimer?.cancel();
+    _poseSubscription?.cancel();
+    _mlkitService.dispose();
   }
 }

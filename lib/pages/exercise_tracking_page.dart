@@ -1,16 +1,18 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
-import 'dart:async';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/prescription_exercise.dart';
 import '../services/quickpose_service.dart';
+import '../widgets/pose_overlay_painter.dart';
 
 class ExerciseTrackingPage extends StatefulWidget {
   final Exercise exercise;
 
   const ExerciseTrackingPage({
-    super.key,
+    Key? key,
     required this.exercise,
-  });
+  }) : super(key: key);
 
   @override
   State<ExerciseTrackingPage> createState() => _ExerciseTrackingPageState();
@@ -18,178 +20,232 @@ class ExerciseTrackingPage extends StatefulWidget {
 
 class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
   CameraController? _cameraController;
-  bool _isInitializing = true;
+  List<CameraDescription> _availableCameras = [];
+  int _currentCameraIndex = 0;
+  bool _isInitializing = false;
   bool _isTracking = false;
-  bool _hasPermission = false;
+  bool _hasPerson = false;
+  bool _showSkeleton = true;
+  
   int _repetitions = 0;
   double _accuracy = 0.0;
   Duration _exerciseDuration = Duration.zero;
   DateTime? _startTime;
-  List<String> _feedback = [];
   Timer? _exerciseTimer;
-  StreamSubscription<Map<String, dynamic>>? _exerciseUpdateSubscription;
+  
+  StreamSubscription? _exerciseUpdateSubscription;
+  StreamSubscription? _poseStreamSubscription;
+  List<String> _feedback = [];
+  List<PoseKeypoint> _currentKeypoints = [];
+  
+  final QuickPoseService _quickPoseService = QuickPoseService.instance;
 
   @override
   void initState() {
     super.initState();
     _initializeCamera();
+    _initializeQuickPose();
   }
 
   @override
   void dispose() {
     _exerciseTimer?.cancel();
     _exerciseUpdateSubscription?.cancel();
+    _poseStreamSubscription?.cancel();
     _cameraController?.dispose();
-    QuickPoseService.stopExerciseTracking();
-    QuickPoseService.dispose();
+    _quickPoseService.dispose();
     super.dispose();
   }
 
-  Future<void> _initializeCamera() async {
+  Future<void> _initializeQuickPose() async {
     try {
-      // Request camera permission
-      final hasPermission = await QuickPoseService.requestCameraPermission();
-      if (!hasPermission) {
-        setState(() {
-          _isInitializing = false;
-          _hasPermission = false;
-        });
+      await _quickPoseService.initialize();
+      
+      // Listen to pose stream for real-time skeleton data
+      _poseStreamSubscription = _quickPoseService.poseStream.listen((poseData) {
+        if (mounted) {
+          setState(() {
+            _hasPerson = poseData['hasPerson'] ?? false;
+            _repetitions = poseData['reps'] ?? 0;
+            _exerciseDuration = Duration(seconds: poseData['duration'] ?? 0);
+            
+            // Convert landmarks to keypoints for skeleton visualization
+            final landmarks = poseData['landmarks'] as Map<String, Map<String, double>>? ?? {};
+            _currentKeypoints = _convertLandmarksToKeypoints(landmarks);
+          });
+        }
+      });
+    } catch (e) {
+      _showErrorSnackBar('Failed to initialize pose detection: ${e.toString()}');
+    }
+  }
+
+  Future<void> _initializeCamera() async {
+    setState(() {
+      _isInitializing = true;
+    });
+
+    try {
+      final status = await Permission.camera.request();
+      if (status != PermissionStatus.granted) {
+        _showErrorSnackBar('Camera permission denied');
         return;
       }
 
-      // Get available cameras
-      final cameras = await QuickPoseService.getAvailableCameras();
-      if (cameras.isEmpty) {
-        setState(() {
-          _isInitializing = false;
-          _hasPermission = false;
-        });
+      _availableCameras = await availableCameras();
+      if (_availableCameras.isEmpty) {
+        _showErrorSnackBar('No cameras available');
         return;
       }
 
-      // Initialize camera controller with front camera
-      final frontCamera = cameras.firstWhere(
-        (camera) => camera.lensDirection == CameraLensDirection.front,
-        orElse: () => cameras.first,
+      _currentCameraIndex = _availableCameras.indexWhere(
+        (camera) => camera.lensDirection == CameraLensDirection.back,
       );
+      if (_currentCameraIndex == -1) {
+        _currentCameraIndex = 0;
+      }
 
       _cameraController = CameraController(
-        frontCamera,
-        ResolutionPreset.high,
+        _availableCameras[_currentCameraIndex],
+        ResolutionPreset.medium,
         enableAudio: false,
       );
 
       await _cameraController!.initialize();
 
-      // Initialize QuickPose SDK
-      await QuickPoseService.initialize();
-
-      setState(() {
-        _isInitializing = false;
-        _hasPermission = true;
-      });
-    } catch (e) {
-      debugPrint('❌ Failed to initialize camera: $e');
-      setState(() {
-        _isInitializing = false;
-        _hasPermission = false;
-      });
-    }
-  }
-
-  Future<void> _startExerciseTracking() async {
-    try {
-      final success = await QuickPoseService.startExerciseTracking(widget.exercise.name);
-      if (success) {
-        setState(() {
-          _isTracking = true;
-          _startTime = DateTime.now();
-          _repetitions = 0;
-          _accuracy = 0.0;
-          _feedback.clear();
-        });
-        
-        // Start exercise timer
-        _startExerciseTimer();
-        
-        // Listen to real-time exercise updates
-        _exerciseUpdateSubscription = QuickPoseService.exerciseUpdates.listen(
-          _handleExerciseUpdate,
-          onError: (error) {
-            debugPrint('❌ Exercise update error: $error');
-          },
-        );
-      }
-    } catch (e) {
-      debugPrint('❌ Failed to start exercise tracking: $e');
-      _showErrorSnackBar('Failed to start exercise tracking');
-    }
-  }
-
-  void _handleExerciseUpdate(Map<String, dynamic> update) {
-    if (mounted && _isTracking) {
-      setState(() {
-        _repetitions = update['repetitions'] ?? _repetitions;
-        _accuracy = (update['accuracy'] ?? _accuracy).toDouble();
-        
-        // Add any new feedback
-        final newFeedback = update['feedback'];
-        if (newFeedback != null && newFeedback is String && !_feedback.contains(newFeedback)) {
-          _feedback.add(newFeedback);
-        }
-      });
-    }
-  }
-
-  Future<void> _stopExerciseTracking() async {
-    try {
-      // Cancel subscriptions
-      _exerciseUpdateSubscription?.cancel();
-      _exerciseTimer?.cancel();
-      
-      await QuickPoseService.stopExerciseTracking();
-      
-      // Get final exercise results
-      final results = await QuickPoseService.getExerciseResults();
-      if (results != null) {
-        setState(() {
-          _repetitions = results.repetitions;
-          _accuracy = results.accuracy;
-          _exerciseDuration = results.duration;
-          _feedback = results.feedback;
-        });
-      } else {
-        // Use current tracking data if no results available
-        setState(() {
-          _exerciseDuration = _startTime != null 
-              ? DateTime.now().difference(_startTime!)
-              : _exerciseDuration;
+      // Start image stream for pose detection
+      if (mounted && _cameraController!.value.isInitialized) {
+        _cameraController!.startImageStream((CameraImage image) {
+          _quickPoseService.processImage(image);
         });
       }
 
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    } catch (e) {
+      _showErrorSnackBar('Failed to initialize camera: ${e.toString()}');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isInitializing = false;
+        });
+      }
+    }
+  }
+
+  void _showErrorSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+      ),
+    );
+  }
+
+  List<PoseKeypoint> _convertLandmarksToKeypoints(Map<String, Map<String, double>> landmarks) {
+    final keypoints = <PoseKeypoint>[];
+    
+    for (final entry in landmarks.entries) {
+      final landmarkName = entry.key;
+      final landmark = entry.value;
+      
+      final keypointType = _getKeypointType(landmarkName);
+      if (keypointType != KeypointType.unknown) {
+        keypoints.add(PoseKeypoint(
+          type: keypointType,
+          x: landmark['x'] ?? 0.0,
+          y: landmark['y'] ?? 0.0,
+          confidence: landmark['visibility'] ?? 0.0,
+        ));
+      }
+    }
+    
+    return keypoints;
+  }
+
+  KeypointType _getKeypointType(String landmarkName) {
+    switch (landmarkName) {
+      case 'nose':
+        return KeypointType.nose;
+      case 'left_eye':
+        return KeypointType.leftEye;
+      case 'right_eye':
+        return KeypointType.rightEye;
+      case 'left_ear':
+        return KeypointType.leftEar;
+      case 'right_ear':
+        return KeypointType.rightEar;
+      case 'left_shoulder':
+        return KeypointType.leftShoulder;
+      case 'right_shoulder':
+        return KeypointType.rightShoulder;
+      case 'left_elbow':
+        return KeypointType.leftElbow;
+      case 'right_elbow':
+        return KeypointType.rightElbow;
+      case 'left_wrist':
+        return KeypointType.leftWrist;
+      case 'right_wrist':
+        return KeypointType.rightWrist;
+      case 'left_hip':
+        return KeypointType.leftHip;
+      case 'right_hip':
+        return KeypointType.rightHip;
+      case 'left_knee':
+        return KeypointType.leftKnee;
+      case 'right_knee':
+        return KeypointType.rightKnee;
+      case 'left_ankle':
+        return KeypointType.leftAnkle;
+      case 'right_ankle':
+        return KeypointType.rightAnkle;
+      default:
+        return KeypointType.unknown;
+    }
+  }
+
+  Future<void> _startTracking() async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      _showErrorSnackBar('Camera not ready');
+      return;
+    }
+
+    try {
+      setState(() {
+        _isTracking = true;
+        _startTime = DateTime.now();
+        _repetitions = 0;
+        _exerciseDuration = Duration.zero;
+      });
+
+      // Start exercise tracking in QuickPose service
+      _quickPoseService.startExercise(widget.exercise.name);
+      
+      _showErrorSnackBar('Exercise tracking started! 🏃‍♂️');
+    } catch (e) {
+      _showErrorSnackBar('Failed to start tracking: ${e.toString()}');
+      setState(() {
+        _isTracking = false;
+      });
+    }
+  }
+
+  Future<void> _stopTracking() async {
+    try {
       setState(() {
         _isTracking = false;
       });
 
-      // Show results dialog
+      // Stop exercise tracking
+      _quickPoseService.stopExercise();
+      
       _showExerciseResults();
     } catch (e) {
-      debugPrint('❌ Failed to stop exercise tracking: $e');
-      _showErrorSnackBar('Failed to stop exercise tracking');
+      _showErrorSnackBar('Failed to stop tracking: ${e.toString()}');
     }
-  }
-
-  void _startExerciseTimer() {
-    _exerciseTimer?.cancel();
-    _exerciseTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (_isTracking && _startTime != null && mounted) {
-        setState(() {
-          _exerciseDuration = DateTime.now().difference(_startTime!);
-        });
-      } else {
-        timer.cancel();
-      }
-    });
   }
 
   void _showExerciseResults() {
@@ -206,29 +262,23 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
             const SizedBox(height: 8),
             Text('Repetitions: $_repetitions'),
             const SizedBox(height: 8),
-            Text('Accuracy: ${(_accuracy * 100).toStringAsFixed(1)}%'),
-            const SizedBox(height: 8),
             Text('Duration: ${_exerciseDuration.inMinutes}:${(_exerciseDuration.inSeconds % 60).toString().padLeft(2, '0')}'),
-            if (_feedback.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Text('Feedback:', style: TextStyle(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 4),
-              ..._feedback.map((feedback) => Text('• $feedback')),
-            ],
+            const SizedBox(height: 8),
+            Text('Person detected: ${_hasPerson ? "Yes" : "No"}'),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              Navigator.of(context).pop(); // Close tracking page
+              Navigator.of(context).pop();
+              Navigator.of(context).pop();
             },
             child: const Text('Done'),
           ),
           ElevatedButton(
             onPressed: () {
-              Navigator.of(context).pop(); // Close dialog
-              _startExerciseTracking(); // Start new session
+              Navigator.of(context).pop();
+              _startTracking();
             },
             child: const Text('Try Again'),
           ),
@@ -237,107 +287,172 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
     );
   }
 
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
+  Widget _buildCameraPreview() {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) {
+      return Container(
+        color: Colors.black,
+        child: const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    return AspectRatio(
+      aspectRatio: _cameraController!.value.aspectRatio,
+      child: Stack(
+        children: [
+          // Camera preview
+          CameraPreview(_cameraController!),
+          
+          // Skeleton overlay
+          if (_showSkeleton && _currentKeypoints.isNotEmpty)
+            CustomPaint(
+              painter: PoseOverlayPainter(
+                keypoints: _currentKeypoints,
+                connections: PoseConnections.humanSkeleton,
+                cameraSize: _cameraController!.value.previewSize ?? const Size(1, 1),
+              ),
+              size: Size.infinite,
+            ),
+          
+          // Person detection indicator
+          if (!_hasPerson && _isTracking)
+            Center(
+              child: Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.8),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'No person detected\nStep into camera view',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                ),
+              ),
+            ),
+          
+          // Real-time stats overlay
+          if (_isTracking)
+            Positioned(
+              top: 16,
+              right: 16,
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.cyan.withOpacity(0.5)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          _hasPerson ? Icons.person : Icons.person_off,
+                          color: _hasPerson ? Colors.lime : Colors.orange,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 6),
+                        Text(
+                          _hasPerson ? 'Tracking' : 'Searching...',
+                          style: TextStyle(
+                            color: _hasPerson ? Colors.lime : Colors.orange,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      '${_currentKeypoints.length}/17 points',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                    if (_hasPerson) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Avg: ${(_currentKeypoints.isNotEmpty ? (_currentKeypoints.map((kp) => kp.confidence).reduce((a, b) => a + b) / _currentKeypoints.length * 100).toStringAsFixed(0) : "0")}%',
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isInitializing) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        body: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(),
+              SizedBox(height: 16),
+              Text(
+                'Initializing camera...',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.exercise.name),
         backgroundColor: widget.exercise.primaryMuscleColor,
-        foregroundColor: Colors.white,
         actions: [
-          if (_isTracking)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              child: Center(
-                child: Text(
-                  '${_exerciseDuration.inMinutes}:${(_exerciseDuration.inSeconds % 60).toString().padLeft(2, '0')}',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+          // Skeleton toggle button
+          if (_cameraController != null && _cameraController!.value.isInitialized)
+            IconButton(
+              icon: Icon(
+                _showSkeleton ? Icons.visibility : Icons.visibility_off,
               ),
+              onPressed: () {
+                setState(() {
+                  _showSkeleton = !_showSkeleton;
+                });
+              },
+              tooltip: _showSkeleton ? 'Hide Skeleton' : 'Show Skeleton',
             ),
         ],
       ),
-      body: _buildBody(),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isInitializing) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 16),
-            Text('Initializing camera and pose detection...'),
-          ],
-        ),
-      );
-    }
-
-    if (!_hasPermission) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.camera_alt_outlined,
-              size: 64,
-              color: Colors.grey,
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Camera permission required',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Please grant camera access to track your exercise',
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _initializeCamera,
-              child: const Text('Grant Permission'),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        // Camera preview
-        if (_cameraController != null && _cameraController!.value.isInitialized)
-          Positioned.fill(
-            child: CameraPreview(_cameraController!),
+      backgroundColor: Colors.black,
+      body: Column(
+        children: [
+          Expanded(
+            child: _buildCameraPreview(),
           ),
-
-        // Exercise information overlay
-        Positioned(
-          top: 16,
-          left: 16,
-          right: 16,
-          child: Container(
+          
+          Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.7),
-              borderRadius: BorderRadius.circular(12),
+              color: Colors.grey[900],
+              border: Border(
+                top: BorderSide(color: Colors.grey[700]!),
+              ),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   widget.exercise.name,
@@ -347,9 +462,11 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
                     fontWeight: FontWeight.bold,
                   ),
                 ),
+                
                 if (_isTracking) ...[
                   const SizedBox(height: 8),
                   Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         'Reps: $_repetitions',
@@ -357,87 +474,84 @@ class _ExerciseTrackingPageState extends State<ExerciseTrackingPage> {
                       ),
                       const SizedBox(width: 16),
                       Text(
-                        'Accuracy: ${(_accuracy * 100).toStringAsFixed(0)}%',
+                        'Time: ${_exerciseDuration.inMinutes}:${(_exerciseDuration.inSeconds % 60).toString().padLeft(2, '0')}',
                         style: const TextStyle(color: Colors.white),
                       ),
                     ],
                   ),
-                ],
-              ],
-            ),
-          ),
-        ),
-
-        // Exercise instructions
-        if (!_isTracking)
-          Positioned(
-            bottom: 200,
-            left: 16,
-            right: 16,
-            child: Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.9),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Exercise Instructions:',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
+                  if (_showSkeleton && _hasPerson) ...[
+                    const SizedBox(height: 8),
+                    Text(
+                      '✓ Real-time skeleton tracking active',
+                      style: TextStyle(
+                        color: Colors.lime,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
+                  ],
+                ],
+                
+                const SizedBox(height: 16),
+                
+                if (!_isTracking) ...[
+                  const Text(
+                    'Get ready to start your exercise!\nMake sure you are fully visible in the camera.',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 16,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 8),
                   if (widget.exercise.instructions.isNotEmpty)
                     ...widget.exercise.instructions.take(3).map(
                       (instruction) => Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text('• $instruction'),
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Text(
+                          '• $instruction',
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
+                        ),
                       ),
                     ),
                 ],
-              ),
-            ),
-          ),
-
-        // Control buttons
-        Positioned(
-          bottom: 32,
-          left: 16,
-          right: 16,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              if (!_isTracking) ...[
-                ElevatedButton.icon(
-                  onPressed: _startExerciseTracking,
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text('Start Exercise'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: widget.exercise.primaryMuscleColor,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  ),
-                ),
-              ] else ...[
-                ElevatedButton.icon(
-                  onPressed: _stopExerciseTracking,
-                  icon: const Icon(Icons.stop),
-                  label: const Text('Stop Exercise'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.red,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
-                  ),
+                
+                const SizedBox(height: 16),
+                
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    if (!_isTracking) ...[
+                      ElevatedButton.icon(
+                        onPressed: _startTracking,
+                        icon: const Icon(Icons.play_arrow),
+                        label: const Text('Start Exercise'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: widget.exercise.primaryMuscleColor,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                      ),
+                    ] else ...[
+                      ElevatedButton.icon(
+                        onPressed: _stopTracking,
+                        icon: const Icon(Icons.stop),
+                        label: const Text('Stop Exercise'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

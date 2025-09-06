@@ -51,6 +51,9 @@ dependencies:
   # Camera and permissions for exercise tracking
   camera: ^0.10.5+5
   permission_handler: ^11.0.1
+  
+  # Real pose detection using Google ML Kit
+  google_mlkit_pose_detection: ^0.14.0
 
 dev_dependencies:
   flutter_test:
