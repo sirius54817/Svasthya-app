@@ -210,61 +210,65 @@ class _PrescriptionExercisesPageState extends State<PrescriptionExercisesPage>
     return Card(
       elevation: 2,
       margin: const EdgeInsets.symmetric(vertical: 4),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Exercise GIF/Video thumbnail
-            CompactExerciseVideo(
-              videoUrl: exercise.gifUrl,
-              exerciseName: exercise.name,
-              onTap: () => _showExerciseDetails(exercise),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    exercise.name,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Wrap(
-                    spacing: 4,
-                    children: exercise.targetMuscles.take(2).map((muscle) {
-                      return Chip(
-                        label: Text(
-                          muscle,
-                          style: const TextStyle(fontSize: 10),
-                        ),
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        visualDensity: VisualDensity.compact,
-                      );
-                    }).toList(),
-                  ),
-                  if (exercise.equipments.isNotEmpty) ...[
-                    const SizedBox(height: 4),
+      child: InkWell(
+        onTap: () => _showExerciseDetails(exercise),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Exercise GIF/Video thumbnail
+              CompactExerciseVideo(
+                videoUrl: exercise.gifUrl,
+                exerciseName: exercise.name,
+                onTap: () => _showExerciseDetails(exercise),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      'Equipment: ${exercise.equipments.join(", ")}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey[600],
+                      exercise.name,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
                       ),
                     ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 4,
+                      children: exercise.targetMuscles.take(2).map((muscle) {
+                        return Chip(
+                          label: Text(
+                            muscle,
+                            style: const TextStyle(fontSize: 10),
+                          ),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          visualDensity: VisualDensity.compact,
+                        );
+                      }).toList(),
+                    ),
+                    if (exercise.equipments.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Equipment: ${exercise.equipments.join(", ")}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.info_outline),
-              onPressed: () => _showExerciseDetails(exercise),
-            ),
-          ],
+              IconButton(
+                icon: const Icon(Icons.info_outline),
+                onPressed: () => _showExerciseDetails(exercise),
+              ),
+            ],
+          ),
         ),
       ),
     );
