@@ -153,8 +153,8 @@ class _LoginPageState extends State<LoginPage> {
                         Container(
                           padding: const EdgeInsets.all(20),
                           decoration: BoxDecoration(
-                            color: theme.colorScheme.primaryContainer,
-                            shape: BoxShape.circle,
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
                             boxShadow: const [
                               BoxShadow(
                                 color: Color(0x20E67E22),
@@ -163,10 +163,22 @@ class _LoginPageState extends State<LoginPage> {
                               ),
                             ],
                           ),
-                          child: Icon(
-                            Icons.health_and_safety,
-                            size: 72,
-                            color: theme.colorScheme.primary,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.asset(
+                              'assets/images/app_logo.jpg',
+                              width: 100,
+                              height: 100,
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) {
+                                // Fallback to icon if image fails to load
+                                return Icon(
+                                  Icons.health_and_safety,
+                                  size: 72,
+                                  color: theme.colorScheme.primary,
+                                );
+                              },
+                            ),
                           ),
                         ),
                         const SizedBox(height: 28),
