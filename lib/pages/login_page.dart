@@ -171,7 +171,7 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 28),
                         Text(
-                          'Svasthya',
+                          'Svasthyaa',
                           style: theme.textTheme.displayMedium?.copyWith(
                             color: theme.colorScheme.primary,
                             fontWeight: FontWeight.bold,
@@ -410,7 +410,7 @@ class _LoginPageState extends State<LoginPage> {
                   // Footer info
                   Center(
                     child: Text(
-                      '© 2025 Svasthya Healthcare',
+                      '© 2025 Svasthyaa Healthcare',
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: theme.colorScheme.onSurfaceVariant,
                         fontSize: 12,

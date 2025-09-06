@@ -23,7 +23,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Svasthya',
+      title: 'Svasthyaa',
       theme: AppTheme.lightTheme,
       themeMode: ThemeMode.light, // Force light mode for entire app
       home: const AuthWrapper(),
@@ -60,7 +60,7 @@ class MainDashboard extends StatelessWidget {
     
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Svasthya Dashboard'),
+        title: const Text('Svasthyaa Dashboard'),
         elevation: 0,
         backgroundColor: theme.colorScheme.surface,
         actions: [
@@ -123,7 +123,7 @@ class MainDashboard extends StatelessWidget {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    'Welcome to Svasthya!',
+                    'Welcome to Svasthyaa!',
                     style: theme.textTheme.displayMedium?.copyWith(
                       color: theme.colorScheme.primary,
                       fontWeight: FontWeight.bold,

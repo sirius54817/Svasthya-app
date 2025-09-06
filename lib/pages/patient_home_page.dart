@@ -17,7 +17,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Svasthya'),
+        title: const Text('Svasthyaa'),
         backgroundColor: Theme.of(context).colorScheme.primary,
         foregroundColor: Colors.white,
         actions: [
@@ -35,7 +35,7 @@ class _PatientHomePageState extends State<PatientHomePage> {
             children: [
               const SizedBox(height: 20),
               Text(
-                'Welcome to Svasthya',
+                'Welcome to Svasthyaa',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                   color: Theme.of(context).colorScheme.primary,
                   fontWeight: FontWeight.bold,
