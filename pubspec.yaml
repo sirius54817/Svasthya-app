@@ -47,6 +47,10 @@ dependencies:
   
   # Cached network images with GIF support
   cached_network_image: ^3.3.0
+  
+  # Camera and permissions for exercise tracking
+  camera: ^0.10.5+5
+  permission_handler: ^11.0.1
 
 dev_dependencies:
   flutter_test:

@@ -45,5 +45,10 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<!-- Camera permission for exercise tracking -->
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to track your exercise movements and provide real-time feedback.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>This app may use microphone for exercise instructions and feedback.</string>
 </dict>
 </plist>
